@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use assert_cmd::Command;
-use serde_json::Value;
+use serde_json::{json, Value};
 use tempfile::tempdir;
 
 fn run(data: &Path, args: &[&str]) -> Value {
@@ -28,6 +28,37 @@ fn raw(data: &Path, args: &[&str]) -> Vec<u8> {
 
 fn txn_of(v: &Value) -> &str {
     v["result"]["transaction_id"].as_str().expect("transaction_id in result")
+}
+
+/// Drive `navi mcp`: feed each request as a JSON-RPC line on stdin, close it,
+/// and parse the line-delimited responses. Isolates state like `raw`.
+fn mcp(data: &Path, requests: &[Value]) -> Vec<Value> {
+    let input = requests
+        .iter()
+        .map(|r| r.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let out = Command::cargo_bin("navi")
+        .unwrap()
+        .env("NAVI_DATA_DIR", data)
+        .env("NAVI_TRASH_DIR", data.join("trash"))
+        .arg("mcp")
+        .write_stdin(input)
+        .output()
+        .unwrap()
+        .stdout;
+    String::from_utf8(out)
+        .unwrap()
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| serde_json::from_str(l).unwrap_or_else(|_| panic!("non-JSON line: {l}")))
+        .collect()
+}
+
+/// The response envelope a `tools/call` carries as its text content.
+fn tool_envelope(resp: &Value) -> Value {
+    let text = resp["result"]["content"][0]["text"].as_str().expect("text content");
+    serde_json::from_str(text).expect("envelope JSON")
 }
 
 #[test]
@@ -362,6 +393,131 @@ fn restore_rejects_unknown_transaction() {
     let v = run(data.path(), &["restore", "deadbeef"]);
     assert_eq!(v["ok"], false);
     assert_eq!(v["error"]["code"], "unknown_txn");
+}
+
+#[test]
+fn mcp_initialize_and_lists_the_tools() {
+    let data = tempdir().unwrap();
+    let resps = mcp(
+        data.path(),
+        &[
+            json!({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                   "params": {"protocolVersion": "2025-06-18", "capabilities": {}}}),
+            json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+            json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
+        ],
+    );
+
+    // The notification produces no response: two requests, two responses.
+    assert_eq!(resps.len(), 2);
+    assert_eq!(resps[0]["result"]["serverInfo"]["name"], "navi");
+    assert_eq!(resps[0]["result"]["protocolVersion"], "2025-06-18");
+
+    let names: Vec<&str> = resps[1]["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["locate", "read", "edit", "move", "remove", "restore"]);
+}
+
+#[test]
+fn mcp_tools_call_runs_a_command() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    std::fs::write(work.path().join("f.txt"), "alpha\nbeta needle\n").unwrap();
+
+    let resps = mcp(
+        data.path(),
+        &[json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                 "params": {"name": "locate",
+                            "arguments": {"query": "needle", "paths": [work.path().to_str().unwrap()]}}})],
+    );
+
+    assert_eq!(resps[0]["result"]["isError"], false);
+    let env = tool_envelope(&resps[0]);
+    assert_eq!(env["ok"], true);
+    assert_eq!(env["result"]["hits"][0]["line"], 2);
+}
+
+#[test]
+fn mcp_edit_then_restore_round_trips() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    let f = work.path().join("cfg.txt");
+    std::fs::write(&f, "v = 1\n").unwrap();
+    let path = f.to_str().unwrap();
+
+    let edited = mcp(
+        data.path(),
+        &[json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                 "params": {"name": "edit",
+                            "arguments": {"path": path, "anchor": "v = 1", "replace": "v = 2", "confirm": true}}})],
+    );
+    let txn = tool_envelope(&edited[0])["result"]["transaction_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "v = 2\n");
+
+    mcp(
+        data.path(),
+        &[json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                 "params": {"name": "restore", "arguments": {"txn": txn}}})],
+    );
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "v = 1\n");
+}
+
+#[test]
+fn mcp_surfaces_a_navi_error_as_is_error() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    let f = work.path().join("d.txt");
+    std::fs::write(&f, "dup\ndup\n").unwrap();
+
+    let resps = mcp(
+        data.path(),
+        &[json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                 "params": {"name": "edit",
+                            "arguments": {"path": f.to_str().unwrap(), "anchor": "dup", "replace": "x"}}})],
+    );
+
+    // A navi failure is a successful call whose envelope carries the error.
+    assert_eq!(resps[0]["result"]["isError"], true);
+    let env = tool_envelope(&resps[0]);
+    assert_eq!(env["ok"], false);
+    assert_eq!(env["error"]["code"], "anchor_ambiguous");
+}
+
+#[test]
+fn mcp_rejects_an_unknown_tool() {
+    let data = tempdir().unwrap();
+    let resps = mcp(
+        data.path(),
+        &[json!({"jsonrpc": "2.0", "id": 7, "method": "tools/call",
+                 "params": {"name": "frobnicate", "arguments": {}}})],
+    );
+    assert_eq!(resps[0]["id"], 7);
+    assert_eq!(resps[0]["error"]["code"], -32602);
+}
+
+#[test]
+fn mcp_call_records_telemetry() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    std::fs::write(work.path().join("f.txt"), "needle\n").unwrap();
+
+    mcp(
+        data.path(),
+        &[json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                 "params": {"name": "locate",
+                            "arguments": {"query": "needle", "paths": [work.path().to_str().unwrap()]}}})],
+    );
+
+    // The MCP path feeds the same feedback loop as the CLI.
+    let report: Value = serde_json::from_slice(&raw(data.path(), &["report", "--json"])).unwrap();
+    assert!(report["by_tool"]["locate"].as_u64().unwrap() >= 1);
 }
 
 #[test]

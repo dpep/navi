@@ -10,9 +10,9 @@ This is an MVP. The point right now is to get the surface in front of real agent
 
 ## Status (resume here)
 
-v0.2.0, on `main` (git@github.com:dpep/navi.git), all pushed. Working: `locate` / `read` / `edit` / `move` / `remove` / `restore` / `report` / `miss`. `remove` is trash-backed and reversible via `restore`; the telemetry feedback loop is wired. Tests: 2 unit + 22 hermetic e2e (`cargo test`), all green.
+v0.2.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` / `move` / `remove` / `restore` / `report` / `miss` / `mcp`. `remove` is trash-backed and reversible via `restore`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio. Tests: 2 unit + 28 hermetic e2e (`cargo test`), all green.
 
-Next step is one of (see Roadmap for detail): `rq` index onboarding, the `navi mcp` transport, or reference-aware `move`/`remove`.
+Next step is one of (see Roadmap for detail): `rq` index onboarding or reference-aware `move`/`remove`.
 
 ## Architecture
 
@@ -85,6 +85,7 @@ When extending navi, preserve this loop. If you add a capability, make sure its 
 cargo build              # debug binary at target/debug/navi
 cargo test               # hermetic e2e suite in tests/cli.rs
 cargo build --release    # stripped, LTO'd binary
+navi mcp                 # serve commands as MCP tools over stdio (JSON-RPC on stdin/stdout)
 ```
 
 `tests/cli.rs` drives the real binary against temp files with an isolated `NAVI_DATA_DIR`, so telemetry/journal never leak between tests or onto the dev machine. Set `NAVI_DATA_DIR` to redirect all state — always do this in tests and scratch runs.
@@ -101,4 +102,4 @@ cargo build --release    # stripped, LTO'd binary
 
 - `rq` requires a prebuilt index; onboarding should index or detect-and-prompt.
 - Reference-aware `move`/`remove`.
-- MCP transport: a `navi mcp` stdio subcommand exposing the same commands as native tools, so agents don't shell out. The command logic is transport-agnostic by design.
+- MCP transport: `navi mcp` (in `src/mcp.rs`) is a stdio JSON-RPC server exposing the result commands (`locate`/`read`/`edit`/`move`/`remove`/`restore`) as native tools. It maps `tools/call` arguments into the same clap `Args` structs (which now also derive `serde::Deserialize`) and runs them through `main::execute`, so every MCP call feeds telemetry just like the CLI. Tool schemas are hand-written in `mcp.rs::tool_specs` — keep them in sync with `cli.rs` when args change. Remaining gaps: no MCP resources/prompts, no streaming/progress, and `report`/`miss` are not exposed as tools.

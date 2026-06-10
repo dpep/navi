@@ -2,6 +2,7 @@
 //! dispatches, the `commands` modules hold the logic.
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 #[derive(Parser)]
@@ -35,6 +36,8 @@ pub enum Command {
     Report(ReportArgs),
     /// Record that a result was unhelpful — feeds `navi report`.
     Miss(MissArgs),
+    /// Serve the commands as MCP tools over stdio (JSON-RPC).
+    Mcp,
 }
 
 impl Command {
@@ -48,6 +51,7 @@ impl Command {
             Command::Restore(_) => "restore",
             Command::Report(_) => "report",
             Command::Miss(_) => "miss",
+            Command::Mcp => "mcp",
         }
     }
 
@@ -65,9 +69,11 @@ impl Command {
     }
 }
 
-#[derive(ValueEnum, Clone, Copy, Debug)]
+#[derive(ValueEnum, Clone, Copy, Debug, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum MatchKind {
     /// Content search (rg → grep).
+    #[default]
     Text,
     /// Symbol/definition search (rq → text fallback).
     Symbol,
@@ -75,33 +81,45 @@ pub enum MatchKind {
     File,
 }
 
-#[derive(Args)]
+#[derive(Args, Deserialize)]
 pub struct LocateArgs {
     /// What to find.
     pub query: String,
     /// Directories to search (default: current directory).
     #[arg(value_name = "PATH")]
+    #[serde(default)]
     pub paths: Vec<String>,
     /// What kind of match.
     #[arg(long = "match", value_enum, default_value_t = MatchKind::Text)]
+    #[serde(rename = "match", default)]
     pub match_kind: MatchKind,
     /// Restrict to a language (e.g. rust, go, python).
     #[arg(long)]
+    #[serde(default)]
     pub lang: Option<String>,
     /// Restrict symbol kinds (rq): class, module, method, function.
     #[arg(long)]
+    #[serde(default)]
     pub kind: Option<String>,
     /// Treat query as a literal string, not a regex.
     #[arg(long)]
+    #[serde(default)]
     pub fixed: bool,
     /// Max results.
     #[arg(long, default_value_t = 50)]
+    #[serde(default = "default_locate_limit")]
     pub limit: usize,
 }
 
-#[derive(ValueEnum, Clone, Copy, Debug)]
+fn default_locate_limit() -> usize {
+    50
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
 pub enum ReadMode {
     /// The whole file (up to --limit lines).
+    #[default]
     Full,
     /// Signatures only — a navigable skeleton.
     Outline,
@@ -111,49 +129,63 @@ pub enum ReadMode {
     Symbol,
 }
 
-#[derive(Args)]
+#[derive(Args, Deserialize)]
 pub struct ReadArgs {
     /// File to read.
     pub path: String,
     /// How to read it.
     #[arg(long = "mode", value_enum, default_value_t = ReadMode::Full)]
+    #[serde(default)]
     pub mode: ReadMode,
     /// Line range for mode=range, e.g. 40:80.
     #[arg(long)]
+    #[serde(default)]
     pub range: Option<String>,
     /// Symbol name for mode=symbol.
     #[arg(long)]
+    #[serde(default)]
     pub symbol: Option<String>,
     /// Max lines / outline entries returned.
     #[arg(long, default_value_t = 400)]
+    #[serde(default = "default_read_limit")]
     pub limit: usize,
 }
 
-#[derive(Args)]
+fn default_read_limit() -> usize {
+    400
+}
+
+#[derive(Args, Deserialize)]
 pub struct EditArgs {
     /// File to edit.
     pub path: String,
     /// Unique anchor text to replace (use with --replace).
     #[arg(long)]
+    #[serde(default)]
     pub anchor: Option<String>,
     /// Replacement for the anchor.
     #[arg(long)]
+    #[serde(default)]
     pub replace: Option<String>,
     /// Line range A:B to replace (use with --content).
     #[arg(long)]
+    #[serde(default)]
     pub range: Option<String>,
     /// Replacement content for the range.
     #[arg(long)]
+    #[serde(default)]
     pub content: Option<String>,
     /// Expected current content hash; edit is rejected if the file changed.
     #[arg(long = "base-hash")]
+    #[serde(rename = "base_hash", default)]
     pub base_hash: Option<String>,
     /// Apply the edit. Without this, navi only previews the diff.
     #[arg(long)]
+    #[serde(default)]
     pub confirm: bool,
 }
 
-#[derive(Args)]
+#[derive(Args, Deserialize)]
 pub struct MoveArgs {
     /// Source path.
     pub from: String,
@@ -161,29 +193,34 @@ pub struct MoveArgs {
     pub to: String,
     /// Apply the move. Without this, navi only previews.
     #[arg(long)]
+    #[serde(default)]
     pub confirm: bool,
     /// Overwrite the destination if it exists.
     #[arg(long)]
+    #[serde(default)]
     pub force: bool,
 }
 
-#[derive(Args)]
+#[derive(Args, Deserialize)]
 pub struct RemoveArgs {
     /// Paths to remove.
     #[arg(required = true)]
     pub paths: Vec<String>,
     /// Apply the removal. Without this, navi only previews.
     #[arg(long)]
+    #[serde(default)]
     pub confirm: bool,
     /// Bypass the scope guard for large removals.
     #[arg(long)]
+    #[serde(default)]
     pub force: bool,
     /// Permanently delete instead of moving to the trash (not restorable).
     #[arg(long)]
+    #[serde(default)]
     pub purge: bool,
 }
 
-#[derive(Args)]
+#[derive(Args, Deserialize)]
 pub struct RestoreArgs {
     /// Transaction id reported by a prior edit / move / remove.
     pub txn: String,
