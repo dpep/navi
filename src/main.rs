@@ -12,6 +12,7 @@ mod journal;
 mod output;
 mod paths;
 mod telemetry;
+mod trashbin;
 mod util;
 
 use std::time::Instant;
@@ -84,6 +85,7 @@ fn dispatch(cmd: &Command) -> Result<Outcome> {
         Command::Edit(a) => commands::edit::run(a),
         Command::Move(a) => commands::fsops::run_move(a),
         Command::Remove(a) => commands::fsops::run_remove(a),
+        Command::Restore(a) => commands::restore::run(a),
         Command::Report(_) | Command::Miss(_) => unreachable!("handled before dispatch"),
     }
 }

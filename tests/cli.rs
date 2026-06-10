@@ -13,15 +13,21 @@ fn run(data: &Path, args: &[&str]) -> Value {
 }
 
 /// Raw stdout — for the meta commands (`report`, `miss`) that don't emit the
-/// result envelope.
+/// result envelope. Isolates both navi state and the trash under `data`, so
+/// removals never touch the real `~/.Trash`.
 fn raw(data: &Path, args: &[&str]) -> Vec<u8> {
     Command::cargo_bin("navi")
         .unwrap()
         .env("NAVI_DATA_DIR", data)
+        .env("NAVI_TRASH_DIR", data.join("trash"))
         .args(args)
         .output()
         .unwrap()
         .stdout
+}
+
+fn txn_of(v: &Value) -> &str {
+    v["result"]["transaction_id"].as_str().expect("transaction_id in result")
 }
 
 #[test]
@@ -251,7 +257,7 @@ fn edit_range_replaces_lines() {
 }
 
 #[test]
-fn remove_confirm_deletes_and_reports() {
+fn remove_confirm_trashes_and_reports() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();
     let f = work.path().join("gone.txt");
@@ -259,8 +265,103 @@ fn remove_confirm_deletes_and_reports() {
 
     let v = run(data.path(), &["remove", f.to_str().unwrap(), "--confirm"]);
     assert_eq!(v["result"]["applied"], true);
+    assert_eq!(v["result"]["action"], "trash");
+    assert_eq!(v["result"]["restorable"], true);
     assert_eq!(v["result"]["removed"].as_array().unwrap().len(), 1);
     assert!(!f.exists());
+}
+
+#[test]
+fn remove_then_restore_brings_a_file_back() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    let f = work.path().join("recover.txt");
+    std::fs::write(&f, "important\n").unwrap();
+
+    let removed = run(data.path(), &["remove", f.to_str().unwrap(), "--confirm"]);
+    assert!(!f.exists());
+
+    let restored = run(data.path(), &["restore", txn_of(&removed)]);
+    assert_eq!(restored["result"]["op"], "remove");
+    assert_eq!(restored["result"]["restored"].as_array().unwrap().len(), 1);
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "important\n");
+}
+
+#[test]
+fn remove_then_restore_brings_a_directory_back() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    let dir = work.path().join("pkg");
+    std::fs::create_dir(&dir).unwrap();
+    std::fs::write(dir.join("mod.rs"), "fn x() {}\n").unwrap();
+
+    let removed = run(data.path(), &["remove", dir.to_str().unwrap(), "--confirm"]);
+    assert!(!dir.exists());
+
+    run(data.path(), &["restore", txn_of(&removed)]);
+    assert!(dir.join("mod.rs").exists());
+    assert_eq!(std::fs::read_to_string(dir.join("mod.rs")).unwrap(), "fn x() {}\n");
+}
+
+#[test]
+fn purge_permanently_deletes_and_is_not_restorable() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    let f = work.path().join("doomed.txt");
+    std::fs::write(&f, "gone for good\n").unwrap();
+
+    let removed = run(data.path(), &["remove", f.to_str().unwrap(), "--purge", "--confirm"]);
+    assert_eq!(removed["result"]["action"], "purge");
+    assert_eq!(removed["result"]["restorable"], false);
+    assert!(!f.exists());
+
+    let restored = run(data.path(), &["restore", txn_of(&removed)]);
+    assert!(restored["result"]["restored"].as_array().unwrap().is_empty());
+    assert_eq!(restored["result"]["skipped"].as_array().unwrap().len(), 1);
+    assert!(!f.exists());
+}
+
+#[test]
+fn edit_then_restore_reverts_content() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    let f = work.path().join("cfg.txt");
+    std::fs::write(&f, "v = 1\n").unwrap();
+
+    let edited = run(
+        data.path(),
+        &["edit", f.to_str().unwrap(), "--anchor", "v = 1", "--replace", "v = 2", "--confirm"],
+    );
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "v = 2\n");
+
+    run(data.path(), &["restore", txn_of(&edited)]);
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "v = 1\n");
+}
+
+#[test]
+fn move_then_restore_renames_back() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    let from = work.path().join("a.txt");
+    let to = work.path().join("b.txt");
+    std::fs::write(&from, "hi\n").unwrap();
+
+    let moved = run(
+        data.path(),
+        &["move", from.to_str().unwrap(), to.to_str().unwrap(), "--confirm"],
+    );
+    assert!(!from.exists() && to.exists());
+
+    run(data.path(), &["restore", txn_of(&moved)]);
+    assert!(from.exists() && !to.exists());
+}
+
+#[test]
+fn restore_rejects_unknown_transaction() {
+    let data = tempdir().unwrap();
+    let v = run(data.path(), &["restore", "deadbeef"]);
+    assert_eq!(v["ok"], false);
+    assert_eq!(v["error"]["code"], "unknown_txn");
 }
 
 #[test]

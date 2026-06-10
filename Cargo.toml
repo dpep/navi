@@ -1,6 +1,6 @@
 [package]
 name = "navi"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Semantic filesystem operations for AI coding agents — locate, read, edit, move, remove with structured JSON I/O"
 license = "MIT"
@@ -18,6 +18,7 @@ sha2 = "0.10"
 dirs = "5"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 which = "6"
+trash = "5.2.6"
 
 [dev-dependencies]
 assert_cmd = "2"

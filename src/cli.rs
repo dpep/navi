@@ -27,8 +27,10 @@ pub enum Command {
     Edit(EditArgs),
     /// Move or rename a file (previewed unless --confirm).
     Move(MoveArgs),
-    /// Remove files (previewed, scope-guarded, journaled).
+    /// Remove files to the trash (previewed, scope-guarded, restorable).
     Remove(RemoveArgs),
+    /// Reverse a journaled edit / move / remove by transaction id.
+    Restore(RestoreArgs),
     /// Summarize the telemetry log: usage, fallbacks, misses, latency.
     Report(ReportArgs),
     /// Record that a result was unhelpful — feeds `navi report`.
@@ -43,6 +45,7 @@ impl Command {
             Command::Edit(_) => "edit",
             Command::Move(_) => "move",
             Command::Remove(_) => "remove",
+            Command::Restore(_) => "restore",
             Command::Report(_) => "report",
             Command::Miss(_) => "miss",
         }
@@ -55,7 +58,8 @@ impl Command {
             Command::Read(a) => json!({"mode": format!("{:?}", a.mode), "limit": a.limit}),
             Command::Edit(a) => json!({"form": if a.anchor.is_some() {"anchor"} else {"range"}, "confirm": a.confirm}),
             Command::Move(a) => json!({"confirm": a.confirm, "force": a.force}),
-            Command::Remove(a) => json!({"count": a.paths.len(), "confirm": a.confirm, "force": a.force}),
+            Command::Remove(a) => json!({"count": a.paths.len(), "confirm": a.confirm, "force": a.force, "purge": a.purge}),
+            Command::Restore(_) => Value::Null,
             _ => Value::Null,
         }
     }
@@ -174,6 +178,15 @@ pub struct RemoveArgs {
     /// Bypass the scope guard for large removals.
     #[arg(long)]
     pub force: bool,
+    /// Permanently delete instead of moving to the trash (not restorable).
+    #[arg(long)]
+    pub purge: bool,
+}
+
+#[derive(Args)]
+pub struct RestoreArgs {
+    /// Transaction id reported by a prior edit / move / remove.
+    pub txn: String,
 }
 
 #[derive(Args)]

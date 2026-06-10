@@ -49,11 +49,13 @@ navi edit src/config.rs --anchor "const TTL = 3600" --replace "const TTL = 7200"
 navi edit src/config.rs --range 12:14 --content "new lines" --base-hash sha256:... --confirm
 ```
 
-Move and remove — previewed and guarded:
+Move and remove — previewed, guarded, and reversible. `remove` sends to the trash by default; `restore` reverses any edit/move/remove by its transaction id:
 
 ```
 navi move old/path.rs new/path.rs --confirm
-navi remove tmp/scratch.rs --confirm
+navi remove tmp/scratch.rs --confirm        # → trash, restorable
+navi remove tmp/scratch.rs --purge --confirm # permanent, not restorable
+navi restore 8e3392fecabd                    # txn id from any edit/move/remove
 ```
 
 ## Output shape
@@ -81,11 +83,12 @@ Failures keep the same shape with `ok: false` and a structured `error` (`code`, 
 - `edit --base-hash` rejects writes if the file changed since you read it.
 - `remove` blocks removals of more than 20 paths without `--force`.
 - `move` won't overwrite an existing destination without `--force`.
-- Every applied mutation journals a before-image.
+- `remove` sends to the OS trash (recoverable); `--purge` permanently deletes.
+- Every applied mutation journals a before-image and reports a transaction id; `navi restore <txn>` reverses it (rewrite for edit, rename back for move, un-trash for remove).
 
 ## Feedback loop
 
-navi logs one event per call (tool, backend, fallbacks, truncation, errors, latency) to `telemetry.jsonl` under its data dir (override with `NAVI_DATA_DIR`).
+navi logs one event per call (tool, backend, fallbacks, truncation, errors, latency) to `telemetry.jsonl` under its data dir (override with `NAVI_DATA_DIR`; set `NAVI_TRASH_DIR` to redirect removals into a managed holding dir instead of the OS trash — used by tests and sandboxes).
 
 ```
 navi miss "symbol search missed the obvious definition" --tool locate
@@ -98,6 +101,5 @@ navi report --json   # machine aggregation
 ## Roadmap
 
 - Index onboarding for `rq` (symbol search needs a prebuilt index).
-- `navi restore` — rollback from the journal.
 - Reference-aware `move`/`remove`.
 - `navi mcp` — MCP stdio transport so agents call these as native tools instead of shelling out.

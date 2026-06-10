@@ -1,5 +1,6 @@
 //! `move` and `remove` — destructive ops without reference checks (deferred),
-//! but with preview, a scope guard, and a before-image journal.
+//! but with preview, a scope guard, a before-image journal, and trash-backed
+//! removal so `navi restore` can bring things back.
 
 use std::fs;
 use std::path::Path;
@@ -10,6 +11,7 @@ use crate::cli::{MoveArgs, RemoveArgs};
 use crate::error::{NaviError, Result};
 use crate::journal;
 use crate::output::Outcome;
+use crate::trashbin;
 
 /// Removals above this many paths require --force.
 const SCOPE_THRESHOLD: usize = 20;
@@ -35,10 +37,15 @@ pub fn run_move(a: &MoveArgs) -> Result<Outcome> {
         })));
     }
 
-    journal::record("move", vec![json!({ "from": a.from, "to": a.to })]);
+    let txn = journal::record("move", vec![json!({ "from": a.from, "to": a.to })]);
     fs::rename(&a.from, &a.to)
         .map_err(|e| NaviError::new("move_failed", format!("could not move: {e}")))?;
-    Ok(Outcome::new(json!({ "applied": true, "from": a.from, "to": a.to })))
+    Ok(Outcome::new(json!({
+        "applied": true,
+        "transaction_id": txn,
+        "from": a.from,
+        "to": a.to,
+    })))
 }
 
 pub fn run_remove(a: &RemoveArgs) -> Result<Outcome> {
@@ -50,6 +57,7 @@ pub fn run_remove(a: &RemoveArgs) -> Result<Outcome> {
         .with_details(json!({ "count": a.paths.len(), "threshold": SCOPE_THRESHOLD })));
     }
 
+    let action = if a.purge { "purge" } else { "trash" };
     let targets: Vec<_> = a
         .paths
         .iter()
@@ -69,32 +77,56 @@ pub fn run_remove(a: &RemoveArgs) -> Result<Outcome> {
         let n = targets.len();
         return Ok(Outcome::new(json!({
             "applied": false,
+            "action": action,
             "targets": targets,
             "hint": "re-run with --confirm to apply",
         }))
         .budget(n, 0, false));
     }
 
+    // Mint the txn up front: it namespaces the managed-trash holding dir and
+    // names the journal entry.
+    let txn = journal::new_txn(&format!("remove:{}", a.paths.join("\u{0}")));
     let mut items = Vec::new();
     let mut removed = Vec::new();
     for p in &a.paths {
         let path = Path::new(p);
         if !path.exists() {
-            items.push(journal::file_item(p, None));
+            items.push(json!({ "path": p, "kind": "missing" }));
             continue;
         }
-        if path.is_dir() {
-            items.push(json!({ "path": p, "kind": "dir" }));
-            fs::remove_dir_all(path)
-                .map_err(|e| NaviError::new("remove_failed", format!("could not remove {p}: {e}")))?;
+        let kind = if path.is_dir() { "dir" } else { "file" };
+        if a.purge {
+            purge(path)?;
+            items.push(json!({ "path": p, "kind": kind, "purged": true }));
         } else {
-            items.push(journal::file_item(p, fs::read_to_string(path).ok()));
-            fs::remove_file(path)
-                .map_err(|e| NaviError::new("remove_failed", format!("could not remove {p}: {e}")))?;
+            let trashed = trashbin::send(path, &txn)?;
+            items.push(json!({
+                "path": p,
+                "kind": kind,
+                "trashed": trashed.map(|t| t.to_string_lossy().into_owned()),
+            }));
         }
         removed.push(p.clone());
     }
-    journal::record("remove", items);
+    journal::write(&txn, "remove", items);
+
     let n = removed.len();
-    Ok(Outcome::new(json!({ "applied": true, "removed": removed })).budget(n, 0, false))
+    Ok(Outcome::new(json!({
+        "applied": true,
+        "action": action,
+        "transaction_id": txn,
+        "removed": removed,
+        "restorable": !a.purge,
+    }))
+    .budget(n, 0, false))
+}
+
+fn purge(path: &Path) -> Result<()> {
+    let r = if path.is_dir() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
+    };
+    r.map_err(|e| NaviError::new("remove_failed", format!("could not remove {}: {e}", path.display())))
 }

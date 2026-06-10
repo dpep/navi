@@ -31,19 +31,17 @@ pub fn run(a: &EditArgs) -> Result<Outcome> {
 
     let new = compute_new(a, &old)?;
     let diff = unified_diff(&a.path, &old, &new);
-    let txn = journal::txn_id(&format!("{}{}", a.path, diff));
 
     if !a.confirm {
         return Ok(Outcome::new(json!({
             "applied": false,
-            "transaction_id": txn,
             "diff": diff,
             "content_hash": hash,
             "hint": "re-run with --confirm to apply",
         })));
     }
 
-    journal::record("edit", vec![journal::file_item(&a.path, Some(old))]);
+    let txn = journal::record("edit", vec![journal::file_item(&a.path, Some(old))]);
     fs::write(&a.path, &new)?;
     Ok(Outcome::new(json!({
         "applied": true,
