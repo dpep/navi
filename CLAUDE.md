@@ -8,6 +8,12 @@ navi is a CLI of semantic filesystem operations for AI coding agents. It exposes
 
 This is an MVP. The point right now is to get the surface in front of real agent usage and let the telemetry tell us where it helps and where it falls short. Prefer shipping a thin, observable slice over a complete one.
 
+## Status (resume here)
+
+v0.2.0, on `main` (git@github.com:dpep/navi.git), all pushed. Working: `locate` / `read` / `edit` / `move` / `remove` / `restore` / `report` / `miss`. `remove` is trash-backed and reversible via `restore`; the telemetry feedback loop is wired. Tests: 2 unit + 22 hermetic e2e (`cargo test`), all green.
+
+Next step is one of (see Roadmap for detail): `rq` index onboarding, the `navi mcp` transport, or reference-aware `move`/`remove`.
+
 ## Architecture
 
 The crate is deliberately thin-at-the-edges:
