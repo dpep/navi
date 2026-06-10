@@ -10,7 +10,7 @@ This is an MVP. The point right now is to get the surface in front of real agent
 
 ## Status (resume here)
 
-v0.3.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` / `move` / `remove` / `restore` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `restore`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 29 hermetic e2e (`cargo test`), all green.
+v0.4.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` / `move` / `remove` / `restore` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `restore`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 30 hermetic e2e (`cargo test`), all green.
 
 Next step is one of (see Roadmap for detail): `rq` index onboarding or reference-aware `move`/`remove`.
 
@@ -43,7 +43,7 @@ Detection is per-invocation via `which` (`backend::Backends::detect`). Preferenc
 
 - content search (`locate --match text`): `rg` → `grep`
 - symbol search (`locate --match symbol`): `rq` → literal text search of the name
-- filename search (`locate --match file`): `rg --files` → `find`
+- filename search (`locate --match file`): `fd` → `rg --files` → `find`
 - `read`/`edit`/`move`/`remove`: pure std::fs, no external tool
 
 When a preferred backend is missing and navi falls back, it MUST set `fallback_reason` (surfaced in the envelope and telemetry) so the gap is measurable. A nonzero exit from `rg`/`grep` means "no matches", NOT an error — only a spawn failure or `rg` exit code 2 is a real error.

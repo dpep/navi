@@ -124,6 +124,29 @@ fn locate_symbol(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outco
 
 fn locate_file(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome> {
     let needle = a.query.to_lowercase();
+    if b.fd {
+        // fd matches the filename natively, so no post-filter is needed.
+        // --fixed-strings keeps it a literal substring match, consistent with
+        // the `find -iname '*q*'` fallback rather than fd's default regex.
+        let mut args: Vec<String> = vec!["--type".into(), "f".into(), "--fixed-strings".into()];
+        if let Some(ext) = a.lang.as_deref().and_then(util::lang_ext) {
+            args.push("-e".into());
+            args.push(ext.into());
+        }
+        args.push(a.query.clone());
+        args.extend(paths.iter().cloned());
+
+        let out = backend::run("fd", &as_refs(&args))?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        let (mut hits, mut total) = (Vec::new(), 0usize);
+        for line in text.lines() {
+            total += 1;
+            if hits.len() < a.limit {
+                hits.push(json!({ "path": line, "kind": "file" }));
+            }
+        }
+        return Ok(finish(hits, total, "fd", None));
+    }
     if b.rg {
         let mut args: Vec<String> = vec!["--files".into()];
         if let Some(g) = a.lang.as_deref().and_then(util::lang_glob) {
@@ -143,7 +166,12 @@ fn locate_file(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome
                 }
             }
         }
-        return Ok(finish(hits, total, "ripgrep", None));
+        return Ok(finish(
+            hits,
+            total,
+            "ripgrep",
+            Some("fd unavailable; used rg --files".into()),
+        ));
     }
     if b.find {
         let mut args: Vec<String> = paths.to_vec();
@@ -165,12 +193,12 @@ fn locate_file(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome
             hits,
             total,
             "find",
-            Some("rg unavailable; used find".into()),
+            Some("fd/rg unavailable; used find".into()),
         ));
     }
     Err(NaviError::new(
         "no_backend",
-        "no filename-search backend found (need rg or find)",
+        "no filename-search backend found (need fd, rg, or find)",
     ))
 }
 

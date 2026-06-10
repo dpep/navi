@@ -301,6 +301,44 @@ fn locate_by_filename() {
 }
 
 #[test]
+fn locate_by_filename_prefers_fd_when_present() {
+    // Only meaningful where fd is installed; the rg/find path is covered by
+    // `locate_by_filename`. Self-skip elsewhere (e.g. Ubuntu CI ships fdfind).
+    let have_fd = std::process::Command::new("fd")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if !have_fd {
+        return;
+    }
+
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    std::fs::write(work.path().join("widget_loader.rs"), "fn x() {}\n").unwrap();
+    std::fs::write(work.path().join("other.rs"), "fn y() {}\n").unwrap();
+
+    let v = run(
+        data.path(),
+        &[
+            "locate",
+            "widget",
+            work.path().to_str().unwrap(),
+            "--match",
+            "file",
+        ],
+    );
+    assert_eq!(v["backend"], "fd");
+    assert_eq!(v["fallback_reason"], Value::Null);
+    let hits = v["result"]["hits"].as_array().unwrap();
+    assert_eq!(hits.len(), 1);
+    assert!(hits[0]["path"]
+        .as_str()
+        .unwrap()
+        .ends_with("widget_loader.rs"));
+}
+
+#[test]
 fn locate_limit_reports_elided_in_budget() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();
