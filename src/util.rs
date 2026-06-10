@@ -21,7 +21,10 @@ pub fn parse_range(s: &str) -> Result<(usize, usize)> {
         .parse()
         .map_err(|_| NaviError::new("invalid_args", "range end is not a number"))?;
     if a < 1 || b < a {
-        return Err(NaviError::new("invalid_args", "range must satisfy 1 <= A <= B"));
+        return Err(NaviError::new(
+            "invalid_args",
+            "range must satisfy 1 <= A <= B",
+        ));
     }
     Ok((a, b))
 }

@@ -21,14 +21,25 @@ pub fn run(a: &ReadArgs) -> Result<Outcome> {
     let lang = util::lang_from_path(&a.path);
 
     match a.mode {
-        ReadMode::Full => Ok(read_range(&a.path, &lines, 1, lines.len(), a.limit, &hash, lang, "full")),
+        ReadMode::Full => Ok(read_range(
+            &a.path,
+            &lines,
+            1,
+            lines.len(),
+            a.limit,
+            &hash,
+            lang,
+            "full",
+        )),
         ReadMode::Range => {
             let s = a
                 .range
                 .as_deref()
                 .ok_or_else(|| NaviError::new("invalid_args", "--range required for mode=range"))?;
             let (start, end) = util::parse_range(s)?;
-            Ok(read_range(&a.path, &lines, start, end, a.limit, &hash, lang, "range"))
+            Ok(read_range(
+                &a.path, &lines, start, end, a.limit, &hash, lang, "range",
+            ))
         }
         ReadMode::Outline => Ok(read_outline(&a.path, &lines, a.limit, &hash, lang)),
         ReadMode::Symbol => read_symbol(a, &lines, &hash, lang),
@@ -57,7 +68,11 @@ fn read_range(
         end = start + limit - 1;
         truncated = true;
     }
-    let slice = if start <= total { &lines[start - 1..end] } else { &[][..] };
+    let slice = if start <= total {
+        &lines[start - 1..end]
+    } else {
+        &[][..]
+    };
     file_slice(path, slice, start, end, total, hash, lang, mode, truncated)
 }
 
@@ -87,7 +102,13 @@ fn file_slice(
     .budget(returned, total.saturating_sub(returned), truncated)
 }
 
-fn read_outline(path: &str, lines: &[&str], limit: usize, hash: &str, lang: Option<&str>) -> Outcome {
+fn read_outline(
+    path: &str,
+    lines: &[&str],
+    limit: usize,
+    hash: &str,
+    lang: Option<&str>,
+) -> Outcome {
     let mut outline = Vec::new();
     let mut seen = 0usize;
     for (i, l) in lines.iter().enumerate() {
@@ -119,8 +140,12 @@ fn read_symbol(a: &ReadArgs, lines: &[&str], hash: &str, lang: Option<&str>) -> 
         return Err(NaviError::new("symbol_not_found", "file is empty"));
     }
     let backends = Backends::detect();
-    let (start_idx, via) = find_symbol_def(&a.path, sym, lines, &backends)
-        .ok_or_else(|| NaviError::new("symbol_not_found", format!("no definition of '{sym}' in {}", a.path)))?;
+    let (start_idx, via) = find_symbol_def(&a.path, sym, lines, &backends).ok_or_else(|| {
+        NaviError::new(
+            "symbol_not_found",
+            format!("no definition of '{sym}' in {}", a.path),
+        )
+    })?;
     let end_idx = extract_block(lines, start_idx, a.limit);
     let span = end_idx - start_idx + 1;
     Ok(Outcome::new(json!({
@@ -140,7 +165,12 @@ fn read_symbol(a: &ReadArgs, lines: &[&str], hash: &str, lang: Option<&str>) -> 
 
 /// Locate the line a symbol is defined on. Prefers rq; falls back to a
 /// definition-heuristic scan of the file.
-fn find_symbol_def(path: &str, sym: &str, lines: &[&str], b: &Backends) -> Option<(usize, &'static str)> {
+fn find_symbol_def(
+    path: &str,
+    sym: &str,
+    lines: &[&str],
+    b: &Backends,
+) -> Option<(usize, &'static str)> {
     if b.rq {
         let args = ["--ndjson", "--no-record", "--limit", "20", sym];
         if let Ok(out) = backend::run("rq", &args) {
@@ -221,8 +251,25 @@ fn indent(line: &str) -> usize {
 /// keyword among the first few tokens. Intentionally language-agnostic.
 fn is_definition(line: &str) -> bool {
     const KW: &[&str] = &[
-        "fn", "func", "function", "def", "class", "struct", "impl", "trait", "enum", "interface",
-        "module", "package", "type", "const", "static", "public", "private", "protected", "export",
+        "fn",
+        "func",
+        "function",
+        "def",
+        "class",
+        "struct",
+        "impl",
+        "trait",
+        "enum",
+        "interface",
+        "module",
+        "package",
+        "type",
+        "const",
+        "static",
+        "public",
+        "private",
+        "protected",
+        "export",
     ];
     let t = line.trim_start();
     if t.starts_with("//") || t.starts_with("/*") || t.starts_with('*') {

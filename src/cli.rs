@@ -58,11 +58,17 @@ impl Command {
     /// A compact, non-sensitive summary of inputs for telemetry.
     pub fn args_summary(&self) -> Value {
         match self {
-            Command::Locate(a) => json!({"match": format!("{:?}", a.match_kind), "lang": a.lang, "limit": a.limit}),
+            Command::Locate(a) => {
+                json!({"match": format!("{:?}", a.match_kind), "lang": a.lang, "limit": a.limit})
+            }
             Command::Read(a) => json!({"mode": format!("{:?}", a.mode), "limit": a.limit}),
-            Command::Edit(a) => json!({"form": if a.anchor.is_some() {"anchor"} else {"range"}, "confirm": a.confirm}),
+            Command::Edit(a) => {
+                json!({"form": if a.anchor.is_some() {"anchor"} else {"range"}, "confirm": a.confirm})
+            }
             Command::Move(a) => json!({"confirm": a.confirm, "force": a.force}),
-            Command::Remove(a) => json!({"count": a.paths.len(), "confirm": a.confirm, "force": a.force, "purge": a.purge}),
+            Command::Remove(a) => {
+                json!({"count": a.paths.len(), "confirm": a.confirm, "force": a.force, "purge": a.purge})
+            }
             Command::Restore(_) => Value::Null,
             _ => Value::Null,
         }

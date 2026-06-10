@@ -71,7 +71,12 @@ fn locate_text(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome
 
         let out = backend::run("grep", &as_refs(&args))?;
         let (hits, total) = parse_grep(&out.stdout, a.limit);
-        return Ok(finish(hits, total, "grep", Some("rg unavailable; used grep".into())));
+        return Ok(finish(
+            hits,
+            total,
+            "grep",
+            Some("rg unavailable; used grep".into()),
+        ));
     }
     Err(NaviError::new(
         "no_backend",
@@ -156,7 +161,12 @@ fn locate_file(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome
                 hits.push(json!({ "path": line, "kind": "file" }));
             }
         }
-        return Ok(finish(hits, total, "find", Some("rg unavailable; used find".into())));
+        return Ok(finish(
+            hits,
+            total,
+            "find",
+            Some("rg unavailable; used find".into()),
+        ));
     }
     Err(NaviError::new(
         "no_backend",

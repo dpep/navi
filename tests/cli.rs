@@ -27,7 +27,9 @@ fn raw(data: &Path, args: &[&str]) -> Vec<u8> {
 }
 
 fn txn_of(v: &Value) -> &str {
-    v["result"]["transaction_id"].as_str().expect("transaction_id in result")
+    v["result"]["transaction_id"]
+        .as_str()
+        .expect("transaction_id in result")
 }
 
 /// Drive `navi mcp`: feed each request as a JSON-RPC line on stdin, close it,
@@ -57,7 +59,9 @@ fn mcp(data: &Path, requests: &[Value]) -> Vec<Value> {
 
 /// The response envelope a `tools/call` carries as its text content.
 fn tool_envelope(resp: &Value) -> Value {
-    let text = resp["result"]["content"][0]["text"].as_str().expect("text content");
+    let text = resp["result"]["content"][0]["text"]
+        .as_str()
+        .expect("text content");
     serde_json::from_str(text).expect("envelope JSON")
 }
 
@@ -67,7 +71,10 @@ fn locate_text_finds_the_match() {
     let data = tempdir().unwrap();
     std::fs::write(work.path().join("f.txt"), "alpha\nbeta needle\ngamma\n").unwrap();
 
-    let v = run(data.path(), &["locate", "needle", work.path().to_str().unwrap()]);
+    let v = run(
+        data.path(),
+        &["locate", "needle", work.path().to_str().unwrap()],
+    );
     assert_eq!(v["ok"], true);
     let hits = v["result"]["hits"].as_array().unwrap();
     assert_eq!(hits.len(), 1);
@@ -83,7 +90,14 @@ fn read_range_returns_the_slice_with_a_hash() {
 
     let v = run(
         data.path(),
-        &["read", f.to_str().unwrap(), "--mode", "range", "--range", "2:3"],
+        &[
+            "read",
+            f.to_str().unwrap(),
+            "--mode",
+            "range",
+            "--range",
+            "2:3",
+        ],
     );
     assert_eq!(v["result"]["text"], "two\nthree");
     assert_eq!(v["result"]["start_line"], 2);
@@ -101,7 +115,10 @@ fn read_outline_lists_definitions() {
     let f = work.path().join("m.rs");
     std::fs::write(&f, "fn a() {}\nlet x = 1;\nfn b() {}\n").unwrap();
 
-    let v = run(data.path(), &["read", f.to_str().unwrap(), "--mode", "outline"]);
+    let v = run(
+        data.path(),
+        &["read", f.to_str().unwrap(), "--mode", "outline"],
+    );
     let outline = v["result"]["outline"].as_array().unwrap();
     assert_eq!(outline.len(), 2);
     assert_eq!(outline[0]["line"], 1);
@@ -116,13 +133,24 @@ fn edit_previews_without_writing_then_applies_on_confirm() {
     std::fs::write(&f, "x = 1\n").unwrap();
     let path = f.to_str().unwrap();
 
-    let preview = run(data.path(), &["edit", path, "--anchor", "x = 1", "--replace", "x = 2"]);
+    let preview = run(
+        data.path(),
+        &["edit", path, "--anchor", "x = 1", "--replace", "x = 2"],
+    );
     assert_eq!(preview["result"]["applied"], false);
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "x = 1\n");
 
     let applied = run(
         data.path(),
-        &["edit", path, "--anchor", "x = 1", "--replace", "x = 2", "--confirm"],
+        &[
+            "edit",
+            path,
+            "--anchor",
+            "x = 1",
+            "--replace",
+            "x = 2",
+            "--confirm",
+        ],
     );
     assert_eq!(applied["result"]["applied"], true);
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "x = 2\n");
@@ -135,7 +163,17 @@ fn edit_rejects_an_ambiguous_anchor() {
     let f = work.path().join("d.txt");
     std::fs::write(&f, "dup\ndup\n").unwrap();
 
-    let v = run(data.path(), &["edit", f.to_str().unwrap(), "--anchor", "dup", "--replace", "x"]);
+    let v = run(
+        data.path(),
+        &[
+            "edit",
+            f.to_str().unwrap(),
+            "--anchor",
+            "dup",
+            "--replace",
+            "x",
+        ],
+    );
     assert_eq!(v["ok"], false);
     assert_eq!(v["error"]["code"], "anchor_ambiguous");
     assert_eq!(v["error"]["details"]["count"], 2);
@@ -150,8 +188,16 @@ fn edit_rejects_a_stale_base_hash() {
 
     let v = run(
         data.path(),
-        &["edit", f.to_str().unwrap(), "--anchor", "v = 1", "--replace", "v = 2",
-          "--base-hash", "sha256:not-the-real-hash"],
+        &[
+            "edit",
+            f.to_str().unwrap(),
+            "--anchor",
+            "v = 1",
+            "--replace",
+            "v = 2",
+            "--base-hash",
+            "sha256:not-the-real-hash",
+        ],
     );
     assert_eq!(v["error"]["code"], "stale_base");
 }
@@ -202,7 +248,12 @@ fn move_refuses_to_clobber_without_force() {
 
     let v = run(
         data.path(),
-        &["move", from.to_str().unwrap(), to.to_str().unwrap(), "--confirm"],
+        &[
+            "move",
+            from.to_str().unwrap(),
+            to.to_str().unwrap(),
+            "--confirm",
+        ],
     );
     assert_eq!(v["error"]["code"], "destination_exists");
     assert_eq!(std::fs::read_to_string(&to).unwrap(), "b\n");
@@ -217,11 +268,20 @@ fn locate_by_filename() {
 
     let v = run(
         data.path(),
-        &["locate", "widget", work.path().to_str().unwrap(), "--match", "file"],
+        &[
+            "locate",
+            "widget",
+            work.path().to_str().unwrap(),
+            "--match",
+            "file",
+        ],
     );
     let hits = v["result"]["hits"].as_array().unwrap();
     assert_eq!(hits.len(), 1);
-    assert!(hits[0]["path"].as_str().unwrap().ends_with("widget_loader.rs"));
+    assert!(hits[0]["path"]
+        .as_str()
+        .unwrap()
+        .ends_with("widget_loader.rs"));
 }
 
 #[test]
@@ -232,7 +292,13 @@ fn locate_limit_reports_elided_in_budget() {
 
     let v = run(
         data.path(),
-        &["locate", "hit", work.path().to_str().unwrap(), "--limit", "2"],
+        &[
+            "locate",
+            "hit",
+            work.path().to_str().unwrap(),
+            "--limit",
+            "2",
+        ],
     );
     assert_eq!(v["result"]["hits"].as_array().unwrap().len(), 2);
     assert_eq!(v["budget"]["returned"], 2);
@@ -258,11 +324,22 @@ fn read_symbol_extracts_the_definition_block() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();
     let f = work.path().join("m.rs");
-    std::fs::write(&f, "fn before() {}\nfn navi_widget() {\n    let z = 1;\n}\nfn after() {}\n").unwrap();
+    std::fs::write(
+        &f,
+        "fn before() {}\nfn navi_widget() {\n    let z = 1;\n}\nfn after() {}\n",
+    )
+    .unwrap();
 
     let v = run(
         data.path(),
-        &["read", f.to_str().unwrap(), "--mode", "symbol", "--symbol", "navi_widget"],
+        &[
+            "read",
+            f.to_str().unwrap(),
+            "--mode",
+            "symbol",
+            "--symbol",
+            "navi_widget",
+        ],
     );
     assert_eq!(v["ok"], true);
     let text = v["result"]["text"].as_str().unwrap();
@@ -281,7 +358,15 @@ fn edit_range_replaces_lines() {
 
     let v = run(
         data.path(),
-        &["edit", f.to_str().unwrap(), "--range", "2:2", "--content", "B", "--confirm"],
+        &[
+            "edit",
+            f.to_str().unwrap(),
+            "--range",
+            "2:2",
+            "--content",
+            "B",
+            "--confirm",
+        ],
     );
     assert_eq!(v["result"]["applied"], true);
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "a\nB\nc\n");
@@ -331,7 +416,10 @@ fn remove_then_restore_brings_a_directory_back() {
 
     run(data.path(), &["restore", txn_of(&removed)]);
     assert!(dir.join("mod.rs").exists());
-    assert_eq!(std::fs::read_to_string(dir.join("mod.rs")).unwrap(), "fn x() {}\n");
+    assert_eq!(
+        std::fs::read_to_string(dir.join("mod.rs")).unwrap(),
+        "fn x() {}\n"
+    );
 }
 
 #[test]
@@ -341,13 +429,19 @@ fn purge_permanently_deletes_and_is_not_restorable() {
     let f = work.path().join("doomed.txt");
     std::fs::write(&f, "gone for good\n").unwrap();
 
-    let removed = run(data.path(), &["remove", f.to_str().unwrap(), "--purge", "--confirm"]);
+    let removed = run(
+        data.path(),
+        &["remove", f.to_str().unwrap(), "--purge", "--confirm"],
+    );
     assert_eq!(removed["result"]["action"], "purge");
     assert_eq!(removed["result"]["restorable"], false);
     assert!(!f.exists());
 
     let restored = run(data.path(), &["restore", txn_of(&removed)]);
-    assert!(restored["result"]["restored"].as_array().unwrap().is_empty());
+    assert!(restored["result"]["restored"]
+        .as_array()
+        .unwrap()
+        .is_empty());
     assert_eq!(restored["result"]["skipped"].as_array().unwrap().len(), 1);
     assert!(!f.exists());
 }
@@ -361,7 +455,15 @@ fn edit_then_restore_reverts_content() {
 
     let edited = run(
         data.path(),
-        &["edit", f.to_str().unwrap(), "--anchor", "v = 1", "--replace", "v = 2", "--confirm"],
+        &[
+            "edit",
+            f.to_str().unwrap(),
+            "--anchor",
+            "v = 1",
+            "--replace",
+            "v = 2",
+            "--confirm",
+        ],
     );
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "v = 2\n");
 
@@ -379,7 +481,12 @@ fn move_then_restore_renames_back() {
 
     let moved = run(
         data.path(),
-        &["move", from.to_str().unwrap(), to.to_str().unwrap(), "--confirm"],
+        &[
+            "move",
+            from.to_str().unwrap(),
+            to.to_str().unwrap(),
+            "--confirm",
+        ],
     );
     assert!(!from.exists() && to.exists());
 
@@ -419,7 +526,10 @@ fn mcp_initialize_and_lists_the_tools() {
         .iter()
         .map(|t| t["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names, ["locate", "read", "edit", "move", "remove", "restore"]);
+    assert_eq!(
+        names,
+        ["locate", "read", "edit", "move", "remove", "restore"]
+    );
 }
 
 #[test]
@@ -527,9 +637,15 @@ fn miss_and_report_round_trip() {
     std::fs::write(work.path().join("f.txt"), "needle\n").unwrap();
 
     // Generate one real event, then a miss.
-    run(data.path(), &["locate", "needle", work.path().to_str().unwrap()]);
-    let recorded: Value =
-        serde_json::from_slice(&raw(data.path(), &["miss", "unhelpful", "--tool", "locate"])).unwrap();
+    run(
+        data.path(),
+        &["locate", "needle", work.path().to_str().unwrap()],
+    );
+    let recorded: Value = serde_json::from_slice(&raw(
+        data.path(),
+        &["miss", "unhelpful", "--tool", "locate"],
+    ))
+    .unwrap();
     assert_eq!(recorded["recorded"], true);
 
     let report: Value = serde_json::from_slice(&raw(data.path(), &["report", "--json"])).unwrap();

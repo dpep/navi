@@ -22,7 +22,12 @@ pub fn run(a: &RestoreArgs) -> Result<Outcome> {
         "edit" => restore_edit(&items)?,
         "move" => restore_move(&items)?,
         "remove" => restore_remove(&items)?,
-        other => return Err(NaviError::new("unrestorable", format!("cannot restore op '{other}'"))),
+        other => {
+            return Err(NaviError::new(
+                "unrestorable",
+                format!("cannot restore op '{other}'"),
+            ))
+        }
     };
 
     let n = restored.len();
@@ -40,8 +45,11 @@ fn restore_edit(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
     for it in items {
         let path = str_field(it, "path")?;
         let before = it["before"].as_str().ok_or_else(|| {
-            NaviError::new("unrestorable", "edit before-image was not captured (file too large)")
-                .with_details(json!({ "path": path }))
+            NaviError::new(
+                "unrestorable",
+                "edit before-image was not captured (file too large)",
+            )
+            .with_details(json!({ "path": path }))
         })?;
         fs::write(path, before)?;
         restored.push(json!({ "path": path }));
@@ -55,8 +63,11 @@ fn restore_move(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
         let from = str_field(it, "from")?;
         let to = str_field(it, "to")?;
         if !Path::new(to).exists() {
-            return Err(NaviError::new("unrestorable", "moved file is no longer at its destination")
-                .with_details(json!({ "to": to })));
+            return Err(NaviError::new(
+                "unrestorable",
+                "moved file is no longer at its destination",
+            )
+            .with_details(json!({ "to": to })));
         }
         trashbin::move_path(Path::new(to), Path::new(from))?;
         restored.push(json!({ "path": from }));

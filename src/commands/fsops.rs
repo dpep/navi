@@ -19,12 +19,18 @@ const SCOPE_THRESHOLD: usize = 20;
 pub fn run_move(a: &MoveArgs) -> Result<Outcome> {
     let src = Path::new(&a.from);
     if !src.exists() {
-        return Err(NaviError::new("not_found", format!("source does not exist: {}", a.from)));
+        return Err(NaviError::new(
+            "not_found",
+            format!("source does not exist: {}", a.from),
+        ));
     }
     let dst_exists = Path::new(&a.to).exists();
     if dst_exists && !a.force {
-        return Err(NaviError::new("destination_exists", "destination exists; pass --force to overwrite")
-            .with_details(json!({ "to": a.to })));
+        return Err(NaviError::new(
+            "destination_exists",
+            "destination exists; pass --force to overwrite",
+        )
+        .with_details(json!({ "to": a.to })));
     }
 
     if !a.confirm {
@@ -128,5 +134,10 @@ fn purge(path: &Path) -> Result<()> {
     } else {
         fs::remove_file(path)
     };
-    r.map_err(|e| NaviError::new("remove_failed", format!("could not remove {}: {e}", path.display())))
+    r.map_err(|e| {
+        NaviError::new(
+            "remove_failed",
+            format!("could not remove {}: {e}", path.display()),
+        )
+    })
 }

@@ -45,7 +45,10 @@ pub fn run() {
 /// Route one parsed message. Returns `None` for notifications, which the spec
 /// says must not be answered.
 fn handle(req: &Value) -> Option<Value> {
-    let method = req.get("method").and_then(Value::as_str).unwrap_or_default();
+    let method = req
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     // Notifications carry no `id` and get no reply (e.g. notifications/initialized).
     let id = req.get("id").cloned()?;
 

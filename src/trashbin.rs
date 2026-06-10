@@ -109,8 +109,12 @@ fn os_trash(path: &Path) -> Result<()> {
         use trash::macos::{DeleteMethod, TrashContextExtMacos};
         ctx.set_delete_method(DeleteMethod::NsFileManager);
     }
-    ctx.delete(path)
-        .map_err(|e| NaviError::new("trash_failed", format!("could not trash {}: {e}", path.display())))
+    ctx.delete(path).map_err(|e| {
+        NaviError::new(
+            "trash_failed",
+            format!("could not trash {}: {e}", path.display()),
+        )
+    })
 }
 
 /// Move a path, falling back to copy+remove across filesystems. Also the

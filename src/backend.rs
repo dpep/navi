@@ -33,7 +33,8 @@ fn have(bin: &str) -> bool {
 /// `rg`/`grep` exit 1 on "no matches", which callers treat as an empty result.
 /// Only a failure to spawn (missing binary, OS error) is an error.
 pub fn run(bin: &str, args: &[&str]) -> Result<Output> {
-    Command::new(bin).args(args).output().map_err(|e| {
-        NaviError::new("backend_spawn_failed", format!("could not run {bin}: {e}"))
-    })
+    Command::new(bin)
+        .args(args)
+        .output()
+        .map_err(|e| NaviError::new("backend_spawn_failed", format!("could not run {bin}: {e}")))
 }
