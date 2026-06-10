@@ -1,0 +1,29 @@
+[package]
+name = "navi"
+version = "0.1.0"
+edition = "2021"
+description = "Semantic filesystem operations for AI coding agents — locate, read, edit, move, remove with structured JSON I/O"
+license = "MIT"
+
+[[bin]]
+name = "navi"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+similar = "2"
+sha2 = "0.10"
+dirs = "5"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+which = "6"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
+
+[profile.release]
+strip = true
+lto = true
