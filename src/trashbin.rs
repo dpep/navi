@@ -103,6 +103,8 @@ fn on_home_volume(path: &Path) -> bool {
 /// non-interactive contexts and needs automation permission. NSFileManager
 /// still lands the item in ~/.Trash, so the capture diff works.
 fn os_trash(path: &Path) -> Result<()> {
+    // `mut` is only exercised by the macOS block below; elsewhere ctx is never mutated.
+    #[cfg_attr(not(target_os = "macos"), allow(unused_mut))]
     let mut ctx = trash::TrashContext::default();
     #[cfg(target_os = "macos")]
     {
