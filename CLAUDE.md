@@ -56,7 +56,11 @@ Mutations are preview-first and reversible-ish:
 - `remove` sends to the trash (recoverable) by default; `--purge` permanently deletes and is journaled as not-restorable.
 - Every applied mutation writes a journal entry (`paths::journal_dir()`) and reports a `transaction_id`. `navi restore <txn>` reverses it: edit → rewrite before-content, move → rename back, remove → move the item out of the trash. The journal entry shape per op is documented at the top of `journal.rs`.
 
-Trash mechanism (`trashbin`): default is the OS trash via the `trash` crate — on macOS forced to `DeleteMethod::NsFileManager` because the crate's default Finder/AppleScript path times out headless and needs automation permission. We capture where the item landed (managed mode: we move it ourselves and know exactly; OS mode: a before/after diff of `~/.Trash`) so restore is navi's own move and doesn't need macOS's absent restore API. Set `NAVI_TRASH_DIR` to use a managed holding dir instead of the OS trash — deterministic and hermetic; tests always set it so they never touch the real `~/.Trash`.
+Trash mechanism (`trashbin`): default is the OS trash via the `trash` crate — on macOS forced to `DeleteMethod::NsFileManager` because the crate's default Finder/AppleScript path times out headless and needs automation permission. We capture where the item landed so restore is navi's own move and doesn't need macOS's absent restore API:
+
+- managed mode (`NAVI_TRASH_DIR` set): we move the item into our own holding dir and know the exact destination. Deterministic and hermetic; tests always set it so they never touch the real `~/.Trash`.
+- cross-volume: the OS trash lands a file in its own volume's `.Trashes`, which our `~/.Trash` capture can't see. We detect this up front (an `st_dev` compare against home) and route those removals into a managed holding dir under the data dir instead, so they stay restorable — no per-volume `.Trashes` diffing.
+- same-volume OS trash: a before/after diff of `~/.Trash`, filtered by name resemblance (`pick_trashed`/`resembles`) so a file that races into the trash concurrently is never mistaken for ours. A missed capture is recoverable (journaled `null`); a wrong one wouldn't be — so we bias to None.
 
 Reference checks (refuse/warn when removing or moving a still-imported file) are intentionally OUT of this MVP.
 
@@ -90,6 +94,5 @@ cargo build --release    # stripped, LTO'd binary
 ## Roadmap / known gaps
 
 - `rq` requires a prebuilt index; onboarding should index or detect-and-prompt.
-- OS-trash location capture on macOS uses a `~/.Trash` before/after diff (single-threaded CLI, so safe); items removed from non-home volumes land in that volume's `.Trashes` and won't be found by the diff, so they're journaled with `trashed: null` and aren't restorable by navi (Finder can still recover them). Managed mode (`NAVI_TRASH_DIR`) has no such gap.
 - Reference-aware `move`/`remove`.
 - MCP transport: a `navi mcp` stdio subcommand exposing the same commands as native tools, so agents don't shell out. The command logic is transport-agnostic by design.
