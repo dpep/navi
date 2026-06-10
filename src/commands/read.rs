@@ -183,8 +183,8 @@ fn extract_block(lines: &[&str], start: usize, limit: usize) -> usize {
     if brace_in_range {
         let mut depth = 0i32;
         let mut opened = false;
-        for i in start..=max_end {
-            for ch in lines[i].chars() {
+        for (offset, line) in lines[start..=max_end].iter().enumerate() {
+            for ch in line.chars() {
                 match ch {
                     '{' => {
                         depth += 1;
@@ -195,19 +195,19 @@ fn extract_block(lines: &[&str], start: usize, limit: usize) -> usize {
                 }
             }
             if opened && depth <= 0 {
-                return i;
+                return start + offset;
             }
         }
         return max_end;
     }
 
     let base = indent(lines[start]);
-    for i in (start + 1)..=max_end {
-        if lines[i].trim().is_empty() {
+    for (offset, line) in lines[start + 1..=max_end].iter().enumerate() {
+        if line.trim().is_empty() {
             continue;
         }
-        if indent(lines[i]) <= base {
-            return i - 1;
+        if indent(line) <= base {
+            return start + offset;
         }
     }
     max_end

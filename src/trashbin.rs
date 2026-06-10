@@ -69,25 +69,6 @@ fn resembles(candidate: &str, orig: &str, stem: &str) -> bool {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::resembles;
-
-    #[test]
-    fn matches_exact_and_collision_renames() {
-        assert!(resembles("foo.txt", "foo.txt", "foo"));
-        assert!(resembles("foo 2.txt", "foo.txt", "foo")); // macOS collision form
-        assert!(resembles("foo", "foo", "foo")); // no extension
-        assert!(resembles("foo 2", "foo", "foo")); // no extension, collision
-    }
-
-    #[test]
-    fn rejects_unrelated_and_lookalike_names() {
-        assert!(!resembles("unrelated.txt", "foo.txt", "foo")); // a stranger raced in
-        assert!(!resembles("foobar.txt", "foo.txt", "foo")); // shares a prefix, different file
-    }
-}
-
 /// Move a path into a managed holding dir namespaced by transaction, returning
 /// the exact destination.
 fn managed_send(root: &Path, path: &Path, txn: &str) -> Result<PathBuf> {
@@ -174,4 +155,23 @@ fn os_trash_snapshot() -> HashSet<PathBuf> {
         }
     }
     set
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resembles;
+
+    #[test]
+    fn matches_exact_and_collision_renames() {
+        assert!(resembles("foo.txt", "foo.txt", "foo"));
+        assert!(resembles("foo 2.txt", "foo.txt", "foo")); // macOS collision form
+        assert!(resembles("foo", "foo", "foo")); // no extension
+        assert!(resembles("foo 2", "foo", "foo")); // no extension, collision
+    }
+
+    #[test]
+    fn rejects_unrelated_and_lookalike_names() {
+        assert!(!resembles("unrelated.txt", "foo.txt", "foo")); // a stranger raced in
+        assert!(!resembles("foobar.txt", "foo.txt", "foo")); // shares a prefix, different file
+    }
 }
