@@ -34,6 +34,7 @@ fn main() {
         Command::Report(a) => return commands::report::run(a),
         Command::Miss(a) => return commands::report::run_miss(a),
         Command::Mcp => return mcp::run(),
+        Command::Install => return commands::install::run(),
         _ => {}
     }
 
@@ -99,7 +100,7 @@ fn dispatch(cmd: &Command) -> Result<Outcome> {
         Command::Move(a) => commands::fsops::run_move(a),
         Command::Remove(a) => commands::fsops::run_remove(a),
         Command::Restore(a) => commands::restore::run(a),
-        Command::Report(_) | Command::Miss(_) | Command::Mcp => {
+        Command::Report(_) | Command::Miss(_) | Command::Mcp | Command::Install => {
             unreachable!("handled before dispatch")
         }
     }

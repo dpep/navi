@@ -10,7 +10,7 @@ This is an MVP. The point right now is to get the surface in front of real agent
 
 ## Status (resume here)
 
-v0.2.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` / `move` / `remove` / `restore` / `report` / `miss` / `mcp`. `remove` is trash-backed and reversible via `restore`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio. Tests: 2 unit + 28 hermetic e2e (`cargo test`), all green.
+v0.3.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` / `move` / `remove` / `restore` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `restore`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 29 hermetic e2e (`cargo test`), all green.
 
 Next step is one of (see Roadmap for detail): `rq` index onboarding or reference-aware `move`/`remove`.
 
@@ -86,9 +86,16 @@ cargo build              # debug binary at target/debug/navi
 cargo test               # hermetic e2e suite in tests/cli.rs
 cargo build --release    # stripped, LTO'd binary
 navi mcp                 # serve commands as MCP tools over stdio (JSON-RPC on stdin/stdout)
+navi install             # register the MCP server with Claude Code (user scope)
 ```
 
 `tests/cli.rs` drives the real binary against temp files with an isolated `NAVI_DATA_DIR`, so telemetry/journal never leak between tests or onto the dev machine. Set `NAVI_DATA_DIR` to redirect all state — always do this in tests and scratch runs.
+
+## Distribution / versioning
+
+navi ships via the personal Homebrew tap, formula at `~/code/lib/homebrew-tools/Formula/navi.rb`. The formula tracks `branch: "main"` with a pinned `version`, so bumping that `version` is what makes `brew upgrade` rebuild from the latest `main` — skip it and installs serve a stale cached build. Its `caveats` print the `claude mcp add --scope user navi -- navi mcp` line; `navi install` runs the same registration. Keep the caveats command and `navi install` in sync.
+
+Bump the version when a change reaches the built binary (behavior, a flag, output wording). Stay below 1.0 — minor for new user-facing capability, patch for fixes/wording. A bump is three edits landed together: `Cargo.toml` `version`, `Cargo.lock` (run `cargo build`), and the formula `version` (push the tap too). Repo-only docs don't bump.
 
 ## Adding a command
 

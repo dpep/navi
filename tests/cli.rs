@@ -66,6 +66,22 @@ fn tool_envelope(resp: &Value) -> Value {
 }
 
 #[test]
+fn install_without_claude_prints_the_manual_command() {
+    // PATH stripped to an empty dir so `claude` is absent: install must fail
+    // gracefully and surface the manual registration command.
+    let empty = tempdir().unwrap();
+    let out = Command::cargo_bin("navi")
+        .unwrap()
+        .env("PATH", empty.path())
+        .arg("install")
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let err = String::from_utf8(out.stderr).unwrap();
+    assert!(err.contains("claude mcp add --scope user navi -- navi mcp"));
+}
+
+#[test]
 fn locate_text_finds_the_match() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();

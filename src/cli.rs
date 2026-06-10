@@ -38,6 +38,8 @@ pub enum Command {
     Miss(MissArgs),
     /// Serve the commands as MCP tools over stdio (JSON-RPC).
     Mcp,
+    /// Register navi's MCP server with Claude Code (user scope).
+    Install,
 }
 
 impl Command {
@@ -52,6 +54,7 @@ impl Command {
             Command::Report(_) => "report",
             Command::Miss(_) => "miss",
             Command::Mcp => "mcp",
+            Command::Install => "install",
         }
     }
 
