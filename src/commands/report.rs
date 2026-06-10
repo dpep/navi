@@ -25,13 +25,14 @@ pub fn run_miss(a: &MissArgs) {
 
 pub fn run(a: &ReportArgs) {
     let path = paths::telemetry_log();
-    let content = match fs::read_to_string(&path) {
-        Ok(c) => c,
-        Err(_) => {
-            println!("no telemetry recorded yet ({})", path.display());
-            return;
-        }
-    };
+    // Read the rotated generation first, then the active log, so events stay in
+    // chronological order across a rotation.
+    let mut content = fs::read_to_string(paths::telemetry_log_rotated()).unwrap_or_default();
+    content.push_str(&fs::read_to_string(&path).unwrap_or_default());
+    if content.is_empty() {
+        println!("no telemetry recorded yet ({})", path.display());
+        return;
+    }
 
     let events: Vec<Value> = content
         .lines()

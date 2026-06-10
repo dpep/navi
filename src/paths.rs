@@ -16,6 +16,13 @@ pub fn telemetry_log() -> PathBuf {
     data_dir().join("telemetry.jsonl")
 }
 
+/// The single rotated generation of the telemetry log. `telemetry::append`
+/// moves the active log here once it crosses the size cap; `report` reads it
+/// alongside the active log so recent history survives a rotation.
+pub fn telemetry_log_rotated() -> PathBuf {
+    data_dir().join("telemetry.jsonl.1")
+}
+
 pub fn journal_dir() -> PathBuf {
     data_dir().join("journal")
 }

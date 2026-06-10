@@ -55,12 +55,29 @@ pub fn log_miss(note: &str, ref_tool: Option<&str>) {
     append(&record);
 }
 
+/// Cap the active telemetry log at 5 MB before rotating. One rotated generation
+/// is kept, so the log is bounded at ~2x this.
+const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
+
 fn append(record: &Value) {
     let path = paths::telemetry_log();
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
+    rotate_if_large(&path);
     if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) {
         let _ = writeln!(f, "{record}");
+    }
+}
+
+/// Once the active log crosses the cap, move it to the single `.1` generation
+/// (replacing any prior one) and start fresh. Best-effort, like logging itself:
+/// a rotation failure must never fail the command.
+fn rotate_if_large(path: &std::path::Path) {
+    let too_big = fs::metadata(path)
+        .map(|m| m.len() >= MAX_LOG_BYTES)
+        .unwrap_or(false);
+    if too_big {
+        let _ = fs::rename(path, paths::telemetry_log_rotated());
     }
 }

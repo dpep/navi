@@ -301,6 +301,39 @@ fn locate_by_filename() {
 }
 
 #[test]
+fn telemetry_log_rotates_past_the_cap_and_report_reads_both() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    std::fs::write(work.path().join("f.txt"), "needle\n").unwrap();
+
+    // Pre-fill the active log past the 5 MB cap with valid event lines.
+    let log = data.path().join("telemetry.jsonl");
+    let line = json!({"tool": "locate", "ok": true, "backend": "ripgrep"}).to_string();
+    let mut bulk = String::with_capacity(6 * 1024 * 1024);
+    while bulk.len() < 6 * 1024 * 1024 {
+        bulk.push_str(&line);
+        bulk.push('\n');
+    }
+    let pre_lines = bulk.lines().count();
+    std::fs::write(&log, &bulk).unwrap();
+
+    // One command triggers rotation, then appends its own event to a fresh log.
+    run(
+        data.path(),
+        &["locate", "needle", work.path().to_str().unwrap()],
+    );
+
+    assert!(data.path().join("telemetry.jsonl.1").exists());
+    let active = std::fs::read_to_string(&log).unwrap();
+    assert_eq!(active.lines().count(), 1); // only the new event
+
+    // report folds both generations: every pre-filled event plus the new one.
+    let out = raw(data.path(), &["report", "--json"]);
+    let agg: Value = serde_json::from_slice(&out).unwrap();
+    assert_eq!(agg["events"], pre_lines as u64 + 1);
+}
+
+#[test]
 fn locate_by_filename_prefers_fd_when_present() {
     // Only meaningful where fd is installed; the rg/find path is covered by
     // `locate_by_filename`. Self-skip elsewhere (e.g. Ubuntu CI ships fdfind).
