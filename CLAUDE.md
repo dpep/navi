@@ -12,7 +12,7 @@ This is an MVP. The point right now is to get the surface in front of real agent
 
 v0.6.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` / `move` / `remove` / `restore` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `restore`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 33 hermetic e2e (`cargo test`), all green.
 
-Next step is one of (see Roadmap for detail): `rq` index onboarding or reference-aware `move`/`remove`.
+Next step is one of (see Roadmap for detail): reference-aware `move`/`remove`.
 
 ## Architecture
 
@@ -48,7 +48,7 @@ Detection is per-invocation via `which` (`backend::Backends::detect`). Preferenc
 
 When a preferred backend is missing and navi falls back, it MUST set `fallback_reason` (surfaced in the envelope and telemetry) so the gap is measurable. A nonzero exit from `rg`/`grep` means "no matches", NOT an error — only a spawn failure or `rg` exit code 2 is a real error.
 
-Note: `rq` searches a prebuilt index (`rq --index <dir>`). An un-indexed repo yields empty symbol results — a known onboarding gap, not a bug.
+Note: `rq` auto-indexes the current repo on first search (resolved from cwd), so no explicit `rq --index` onboarding is needed. `rq`'s `-p` filter is repo-relative; navi forwards the caller's `paths` as `-p`, so paths must be repo-relative (an absolute path that rq can't normalize filters to empty — fixed in rq's `-p` normalization).
 
 ## Safety model
 
@@ -107,7 +107,6 @@ Bump the version when a change reaches the built binary (behavior, a flag, outpu
 
 ## Roadmap / known gaps
 
-- `rq` requires a prebuilt index; onboarding should index or detect-and-prompt.
 - Reference-aware `move`/`remove`.
 - Telemetry retention beyond the 5 MB size-cap rotation: a rotated `.1` generation bounds the log at ~2x but still discards old history wholesale. Follow-ups: (3) roll-up/compaction — fold aged raw events into pre-aggregated daily counters so long-term trends survive cheaply; (4) time-based retention — drop events older than N days (e.g. on a `navi report --compact`). Either keeps `report` fast without losing the trend.
 - MCP transport: `navi mcp` (in `src/mcp.rs`) is a stdio JSON-RPC server exposing the result commands (`locate`/`read`/`edit`/`move`/`remove`/`restore`) as native tools. It maps `tools/call` arguments into the same clap `Args` structs (which now also derive `serde::Deserialize`) and runs them through `main::execute`, so every MCP call feeds telemetry just like the CLI. Tool schemas are hand-written in `mcp.rs::tool_specs` — keep them in sync with `cli.rs` when args change. Remaining gaps: no MCP resources/prompts, no streaming/progress, and `report`/`miss` are not exposed as tools.
