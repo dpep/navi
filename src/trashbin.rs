@@ -1,10 +1,10 @@
-//! Sending paths to the trash, and the moves that restore relies on.
+//! Sending paths to the trash, and the moves that undo relies on.
 //!
 //! Two modes. When `NAVI_TRASH_DIR` is set we manage our own holding dir and
 //! know exactly where each item lands — deterministic, hermetic, used by tests
 //! and sandboxes. Otherwise we use the real OS trash (macOS ~/.Trash, Windows
 //! recycle bin, freedesktop on Linux) via the `trash` crate, and best-effort
-//! capture the resulting location so `navi restore` can move it back without
+//! capture the resulting location so `navi undo` can move it back without
 //! needing the OS's (macOS-absent) restore API.
 
 use std::collections::HashSet;

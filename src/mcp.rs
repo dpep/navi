@@ -1,5 +1,5 @@
 //! MCP stdio transport: exposes navi's result-bearing commands as native MCP
-//! tools, so an agent can call `locate`/`read`/`edit`/`move`/`remove`/`restore`
+//! tools, so an agent can call `locate`/`read`/`edit`/`move`/`remove`/`undo`
 //! as tools instead of shelling out and re-parsing text.
 //!
 //! The command logic is transport-agnostic. This module only speaks JSON-RPC
@@ -113,7 +113,7 @@ fn build_command(name: &str, args: Value) -> std::result::Result<Command, String
         "edit" => Command::Edit(de(args)?),
         "move" => Command::Move(de(args)?),
         "remove" => Command::Remove(de(args)?),
-        "restore" => Command::Restore(de(args)?),
+        "undo" => Command::Undo(de(args)?),
         other => return Err(format!("unknown tool: {other}")),
     })
 }
@@ -215,8 +215,8 @@ fn tool_specs() -> Value {
             }
         },
         {
-            "name": "restore",
-            "description": "Reverse a journaled edit / move / remove by transaction id.",
+            "name": "undo",
+            "description": "Undo a journaled edit / move / remove by transaction id.",
             "inputSchema": {
                 "type": "object",
                 "required": ["txn"],

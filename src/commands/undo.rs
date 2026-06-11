@@ -1,28 +1,28 @@
-//! `restore` — reverse a journaled transaction. One command covers all three
-//! mutations: edit (rewrite before-content), move (rename back), remove (move
-//! the item out of the trash to where it was).
+//! `undo` — reverse a journaled transaction. One command covers every mutation:
+//! edit (rewrite before-content), create (delete the created file), move (rename
+//! back), remove (move the item out of the trash to where it was).
 
 use std::fs;
 use std::path::Path;
 
 use serde_json::{json, Value};
 
-use crate::cli::RestoreArgs;
+use crate::cli::UndoArgs;
 use crate::error::{NaviError, Result};
 use crate::journal;
 use crate::output::Outcome;
 use crate::trashbin;
 
-pub fn run(a: &RestoreArgs) -> Result<Outcome> {
+pub fn run(a: &UndoArgs) -> Result<Outcome> {
     let entry = journal::load(&a.txn)?;
     let op = entry["op"].as_str().unwrap_or("");
     let items = entry["items"].as_array().cloned().unwrap_or_default();
 
     let (restored, skipped) = match op {
-        "edit" => restore_edit(&items)?,
-        "create" => restore_create(&items)?,
-        "move" => restore_move(&items)?,
-        "remove" => restore_remove(&items)?,
+        "edit" => undo_edit(&items)?,
+        "create" => undo_create(&items)?,
+        "move" => undo_move(&items)?,
+        "remove" => undo_remove(&items)?,
         other => {
             return Err(NaviError::new(
                 "unrestorable",
@@ -41,7 +41,7 @@ pub fn run(a: &RestoreArgs) -> Result<Outcome> {
     .budget(n, skipped.len(), false))
 }
 
-fn restore_edit(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
+fn undo_edit(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
     let mut restored = Vec::new();
     for it in items {
         let path = str_field(it, "path")?;
@@ -60,7 +60,7 @@ fn restore_edit(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
 
 /// Undo a create by deleting the file. A path already gone is skipped, not an
 /// error — the end state (absent) is what restore wants either way.
-fn restore_create(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
+fn undo_create(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
     let mut restored = Vec::new();
     let mut skipped = Vec::new();
     for it in items {
@@ -78,7 +78,7 @@ fn restore_create(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
     Ok((restored, skipped))
 }
 
-fn restore_move(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
+fn undo_move(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
     let mut restored = Vec::new();
     for it in items {
         let from = str_field(it, "from")?;
@@ -96,7 +96,7 @@ fn restore_move(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
     Ok((restored, Vec::new()))
 }
 
-fn restore_remove(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
+fn undo_remove(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
     let mut restored = Vec::new();
     let mut skipped = Vec::new();
     for it in items {

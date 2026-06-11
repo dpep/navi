@@ -204,7 +204,7 @@ fn edit_previews_without_writing_then_applies_on_confirm() {
 }
 
 #[test]
-fn edit_creates_a_new_file_and_restore_deletes_it() {
+fn edit_creates_a_new_file_and_undo_deletes_it() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();
     let f = work.path().join("sub/new.rs");
@@ -224,9 +224,9 @@ fn edit_creates_a_new_file_and_restore_deletes_it() {
     assert_eq!(applied["result"]["created"], true);
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "fn x() {}\n");
 
-    // restore removes the created file
+    // undo removes the created file
     let txn = txn_of(&applied);
-    let restored = run(data.path(), &["restore", txn]);
+    let restored = run(data.path(), &["undo", txn]);
     assert_eq!(restored["result"]["op"], "create");
     assert!(!f.exists());
 }
@@ -574,7 +574,7 @@ fn remove_confirm_trashes_and_reports() {
 }
 
 #[test]
-fn remove_then_restore_brings_a_file_back() {
+fn remove_then_undo_brings_a_file_back() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();
     let f = work.path().join("recover.txt");
@@ -583,14 +583,14 @@ fn remove_then_restore_brings_a_file_back() {
     let removed = run(data.path(), &["remove", f.to_str().unwrap(), "--confirm"]);
     assert!(!f.exists());
 
-    let restored = run(data.path(), &["restore", txn_of(&removed)]);
+    let restored = run(data.path(), &["undo", txn_of(&removed)]);
     assert_eq!(restored["result"]["op"], "remove");
     assert_eq!(restored["result"]["restored"].as_array().unwrap().len(), 1);
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "important\n");
 }
 
 #[test]
-fn remove_then_restore_brings_a_directory_back() {
+fn remove_then_undo_brings_a_directory_back() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();
     let dir = work.path().join("pkg");
@@ -600,7 +600,7 @@ fn remove_then_restore_brings_a_directory_back() {
     let removed = run(data.path(), &["remove", dir.to_str().unwrap(), "--confirm"]);
     assert!(!dir.exists());
 
-    run(data.path(), &["restore", txn_of(&removed)]);
+    run(data.path(), &["undo", txn_of(&removed)]);
     assert!(dir.join("mod.rs").exists());
     assert_eq!(
         std::fs::read_to_string(dir.join("mod.rs")).unwrap(),
@@ -623,7 +623,7 @@ fn purge_permanently_deletes_and_is_not_restorable() {
     assert_eq!(removed["result"]["restorable"], false);
     assert!(!f.exists());
 
-    let restored = run(data.path(), &["restore", txn_of(&removed)]);
+    let restored = run(data.path(), &["undo", txn_of(&removed)]);
     assert!(restored["result"]["restored"]
         .as_array()
         .unwrap()
@@ -633,7 +633,7 @@ fn purge_permanently_deletes_and_is_not_restorable() {
 }
 
 #[test]
-fn edit_then_restore_reverts_content() {
+fn edit_then_undo_reverts_content() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();
     let f = work.path().join("cfg.txt");
@@ -653,12 +653,12 @@ fn edit_then_restore_reverts_content() {
     );
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "v = 2\n");
 
-    run(data.path(), &["restore", txn_of(&edited)]);
+    run(data.path(), &["undo", txn_of(&edited)]);
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "v = 1\n");
 }
 
 #[test]
-fn move_then_restore_renames_back() {
+fn move_then_undo_renames_back() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();
     let from = work.path().join("a.txt");
@@ -676,14 +676,14 @@ fn move_then_restore_renames_back() {
     );
     assert!(!from.exists() && to.exists());
 
-    run(data.path(), &["restore", txn_of(&moved)]);
+    run(data.path(), &["undo", txn_of(&moved)]);
     assert!(from.exists() && !to.exists());
 }
 
 #[test]
-fn restore_rejects_unknown_transaction() {
+fn undo_rejects_unknown_transaction() {
     let data = tempdir().unwrap();
-    let v = run(data.path(), &["restore", "deadbeef"]);
+    let v = run(data.path(), &["undo", "deadbeef"]);
     assert_eq!(v["ok"], false);
     assert_eq!(v["error"]["code"], "unknown_txn");
 }
@@ -712,10 +712,7 @@ fn mcp_initialize_and_lists_the_tools() {
         .iter()
         .map(|t| t["name"].as_str().unwrap())
         .collect();
-    assert_eq!(
-        names,
-        ["locate", "read", "edit", "move", "remove", "restore"]
-    );
+    assert_eq!(names, ["locate", "read", "edit", "move", "remove", "undo"]);
 }
 
 #[test]
@@ -738,7 +735,7 @@ fn mcp_tools_call_runs_a_command() {
 }
 
 #[test]
-fn mcp_edit_then_restore_round_trips() {
+fn mcp_edit_then_undo_round_trips() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();
     let f = work.path().join("cfg.txt");
@@ -760,7 +757,7 @@ fn mcp_edit_then_restore_round_trips() {
     mcp(
         data.path(),
         &[json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                 "params": {"name": "restore", "arguments": {"txn": txn}}})],
+                 "params": {"name": "undo", "arguments": {"txn": txn}}})],
     );
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "v = 1\n");
 }

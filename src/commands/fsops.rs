@@ -1,6 +1,6 @@
 //! `move` and `remove` — destructive ops without reference checks (deferred),
 //! but with preview, a scope guard, a before-image journal, and trash-backed
-//! removal so `navi restore` can bring things back.
+//! removal so `navi undo` can bring things back.
 
 use std::fs;
 use std::path::Path;

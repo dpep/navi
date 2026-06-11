@@ -57,7 +57,7 @@ pub fn run(a: &EditArgs) -> Result<Outcome> {
 }
 
 /// Create a new file from `--content`. Anchor/range/base-hash all assume prior
-/// content, so they're rejected here. Journaled as a `create` so `restore` can
+/// content, so they're rejected here. Journaled as a `create` so `undo` can
 /// undo it by deleting the file.
 fn create_file(a: &EditArgs) -> Result<Outcome> {
     let content = a.content.as_deref().ok_or_else(|| {

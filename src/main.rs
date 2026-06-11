@@ -99,7 +99,7 @@ fn dispatch(cmd: &Command) -> Result<Outcome> {
         Command::Edit(a) => commands::edit::run(a),
         Command::Move(a) => commands::fsops::run_move(a),
         Command::Remove(a) => commands::fsops::run_remove(a),
-        Command::Restore(a) => commands::restore::run(a),
+        Command::Undo(a) => commands::undo::run(a),
         Command::Report(_) | Command::Miss(_) | Command::Mcp | Command::Install => {
             unreachable!("handled before dispatch")
         }

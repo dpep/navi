@@ -1,5 +1,5 @@
 //! Before-image journal for every mutation (edit/create/move/remove). The
-//! substrate `navi restore` reverses from. Each entry is named by its
+//! substrate `navi undo` reverses from. Each entry is named by its
 //! transaction id and records exactly what's needed to undo the op:
 //!   edit   → [{ path, before }]                 (rewrite before-content)
 //!   create → [{ path }]                          (delete the created file)
@@ -46,7 +46,7 @@ pub fn record(op: &str, items: Vec<Value>) -> String {
     txn
 }
 
-/// Load a journal entry for restore.
+/// Load a journal entry for undo.
 pub fn load(txn: &str) -> Result<Value> {
     let path = paths::journal_dir().join(format!("{txn}.json"));
     let s = fs::read_to_string(&path)

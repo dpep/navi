@@ -10,7 +10,7 @@ This is an MVP. The point right now is to get the surface in front of real agent
 
 ## Status (resume here)
 
-v0.7.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` (edits or creates) / `move` / `remove` / `restore` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `restore`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 35 hermetic e2e (`cargo test`), all green.
+v0.8.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` (edits or creates) / `move` / `remove` / `undo` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `undo`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 35 hermetic e2e (`cargo test`), all green.
 
 Next step is one of (see Roadmap for detail): reference-aware `move`/`remove`.
 
@@ -20,8 +20,8 @@ The crate is deliberately thin-at-the-edges:
 
 - `src/main.rs` — parse args, dispatch to a command, wrap the result in the shared envelope, record one telemetry event. No logic.
 - `src/cli.rs` — clap structs/enums only. The whole CLI surface lives here.
-- `src/commands/` — one module per command; this is where the logic is. `locate`, `read`, `edit`, `fsops` (move + remove), `restore`, `report` (report + miss).
-- Sibling modules are I/O-light helpers: `backend` (tool detection + spawning), `output` (the envelope), `telemetry` (the feedback log), `journal` (before-images + restore substrate), `trashbin` (OS/managed trash + the move primitive restore uses), `paths` (state locations), `util` (hashing, lang maps, range parsing), `error` (structured errors).
+- `src/commands/` — one module per command; this is where the logic is. `locate`, `read`, `edit`, `fsops` (move + remove), `undo`, `report` (report + miss).
+- Sibling modules are I/O-light helpers: `backend` (tool detection + spawning), `output` (the envelope), `telemetry` (the feedback log), `journal` (before-images + undo substrate), `trashbin` (OS/managed trash + the move primitive undo uses), `paths` (state locations), `util` (hashing, lang maps, range parsing), `error` (structured errors).
 
 Keep `main.rs` and `cli.rs` boring. New behavior goes in a `commands/` module plus a helper module if it's reusable.
 
@@ -61,9 +61,9 @@ Mutations are preview-first and reversible-ish:
 - `remove` refuses more than `SCOPE_THRESHOLD` (20) paths without `--force` (`scope_exceeded`).
 - `move` refuses to clobber an existing destination without `--force` (`destination_exists`).
 - `remove` sends to the trash (recoverable) by default; `--purge` permanently deletes and is journaled as not-restorable.
-- Every applied mutation writes a journal entry (`paths::journal_dir()`) and reports a `transaction_id`. `navi restore <txn>` reverses it: edit → rewrite before-content, create → delete the created file, move → rename back, remove → move the item out of the trash. The journal entry shape per op is documented at the top of `journal.rs`.
+- Every applied mutation writes a journal entry (`paths::journal_dir()`) and reports a `transaction_id`. `navi undo <txn>` reverses it: edit → rewrite before-content, create → delete the created file, move → rename back, remove → move the item out of the trash. The journal entry shape per op is documented at the top of `journal.rs`.
 
-Trash mechanism (`trashbin`): default is the OS trash via the `trash` crate — on macOS forced to `DeleteMethod::NsFileManager` because the crate's default Finder/AppleScript path times out headless and needs automation permission. We capture where the item landed so restore is navi's own move and doesn't need macOS's absent restore API:
+Trash mechanism (`trashbin`): default is the OS trash via the `trash` crate — on macOS forced to `DeleteMethod::NsFileManager` because the crate's default Finder/AppleScript path times out headless and needs automation permission. We capture where the item landed so undo is navi's own move and doesn't need macOS's absent restore API:
 
 - managed mode (`NAVI_TRASH_DIR` set): we move the item into our own holding dir and know the exact destination. Deterministic and hermetic; tests always set it so they never touch the real `~/.Trash`.
 - cross-volume: the OS trash lands a file in its own volume's `.Trashes`, which our `~/.Trash` capture can't see. We detect this up front (an `st_dev` compare against home) and route those removals into a managed holding dir under the data dir instead, so they stay restorable — no per-volume `.Trashes` diffing.
@@ -110,4 +110,4 @@ Bump the version when a change reaches the built binary (behavior, a flag, outpu
 
 - Reference-aware `move`/`remove`.
 - Telemetry retention beyond the 5 MB size-cap rotation: a rotated `.1` generation bounds the log at ~2x but still discards old history wholesale. Follow-ups: (3) roll-up/compaction — fold aged raw events into pre-aggregated daily counters so long-term trends survive cheaply; (4) time-based retention — drop events older than N days (e.g. on a `navi report --compact`). Either keeps `report` fast without losing the trend.
-- MCP transport: `navi mcp` (in `src/mcp.rs`) is a stdio JSON-RPC server exposing the result commands (`locate`/`read`/`edit`/`move`/`remove`/`restore`) as native tools. It maps `tools/call` arguments into the same clap `Args` structs (which now also derive `serde::Deserialize`) and runs them through `main::execute`, so every MCP call feeds telemetry just like the CLI. Tool schemas are hand-written in `mcp.rs::tool_specs` — keep them in sync with `cli.rs` when args change. Remaining gaps: no MCP resources/prompts, no streaming/progress, and `report`/`miss` are not exposed as tools.
+- MCP transport: `navi mcp` (in `src/mcp.rs`) is a stdio JSON-RPC server exposing the result commands (`locate`/`read`/`edit`/`move`/`remove`/`undo`) as native tools. It maps `tools/call` arguments into the same clap `Args` structs (which now also derive `serde::Deserialize`) and runs them through `main::execute`, so every MCP call feeds telemetry just like the CLI. Tool schemas are hand-written in `mcp.rs::tool_specs` — keep them in sync with `cli.rs` when args change. Remaining gaps: no MCP resources/prompts, no streaming/progress, and `report`/`miss` are not exposed as tools.

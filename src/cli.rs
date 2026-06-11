@@ -31,8 +31,8 @@ pub enum Command {
     Move(MoveArgs),
     /// Remove files to the trash (previewed, scope-guarded, restorable).
     Remove(RemoveArgs),
-    /// Reverse a journaled edit / move / remove by transaction id.
-    Restore(RestoreArgs),
+    /// Undo a journaled edit / create / move / remove by transaction id.
+    Undo(UndoArgs),
     /// Summarize the telemetry log: usage, fallbacks, misses, latency.
     Report(ReportArgs),
     /// Record that a result was unhelpful — feeds `navi report`.
@@ -51,7 +51,7 @@ impl Command {
             Command::Edit(_) => "edit",
             Command::Move(_) => "move",
             Command::Remove(_) => "remove",
-            Command::Restore(_) => "restore",
+            Command::Undo(_) => "undo",
             Command::Report(_) => "report",
             Command::Miss(_) => "miss",
             Command::Mcp => "mcp",
@@ -73,7 +73,7 @@ impl Command {
             Command::Remove(a) => {
                 json!({"count": a.paths.len(), "confirm": a.confirm, "force": a.force, "purge": a.purge})
             }
-            Command::Restore(_) => Value::Null,
+            Command::Undo(_) => Value::Null,
             _ => Value::Null,
         }
     }
@@ -231,8 +231,8 @@ pub struct RemoveArgs {
 }
 
 #[derive(Args, Deserialize)]
-pub struct RestoreArgs {
-    /// Transaction id reported by a prior edit / move / remove.
+pub struct UndoArgs {
+    /// Transaction id reported by a prior edit / create / move / remove.
     pub txn: String,
 }
 
