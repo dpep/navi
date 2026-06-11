@@ -109,18 +109,24 @@ fn read_outline(
     hash: &str,
     lang: Option<&str>,
 ) -> Outcome {
-    let mut outline = Vec::new();
-    let mut seen = 0usize;
-    for (i, l) in lines.iter().enumerate() {
-        if let Some(kind) = definition_kind(l) {
-            seen += 1;
-            if outline.len() < limit {
-                outline.push(json!({ "line": i + 1, "kind": kind, "text": util::snippet(l) }));
-            }
+    // Prefer rq's real symbol table (kind/parent/signature); fall back to the
+    // keyword scan when rq is absent or has nothing for this file (un-indexed or
+    // an unsupported language). The fallback is reflected so the gap is visible.
+    let backends = Backends::detect();
+    let (outline, seen, backend, fallback) = match backends.rq.then(|| rq_outline(path, limit)) {
+        Some(Some((entries, total))) => (entries, total, Some("rq"), None),
+        present => {
+            let (entries, total) = heuristic_outline(lines, limit);
+            let reason = if present.is_some() {
+                "rq yielded no symbols (un-indexed or unsupported language); used heuristic scan"
+            } else {
+                "rq unavailable; used heuristic scan"
+            };
+            (entries, total, None, Some(reason.to_string()))
         }
-    }
+    };
     let returned = outline.len();
-    Outcome::new(json!({
+    let mut o = Outcome::new(json!({
         "path": path,
         "lang": lang,
         "total_lines": lines.len(),
@@ -128,7 +134,64 @@ fn read_outline(
         "mode": "outline",
         "outline": outline,
     }))
-    .budget(returned, seen.saturating_sub(returned), seen > returned)
+    .budget(returned, seen.saturating_sub(returned), seen > returned);
+    if let Some(b) = backend {
+        o = o.backend(b);
+    }
+    if let Some(f) = fallback {
+        o = o.fallback(f);
+    }
+    o
+}
+
+/// Outline via `rq --symbols`: real symbols with kind, parent, and signature, in
+/// line order. `None` when rq spawns but returns nothing (file not indexed or an
+/// unsupported language), so the caller falls back to the scan.
+fn rq_outline(path: &str, limit: usize) -> Option<(Vec<Value>, usize)> {
+    let out = backend::run("rq", &["--symbols", path, "--ndjson", "--no-record"]).ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut entries = Vec::new();
+    let mut total = 0usize;
+    for line in text.lines() {
+        let v: Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        total += 1;
+        if entries.len() >= limit {
+            continue;
+        }
+        entries.push(json!({
+            "line": v["line"].as_u64().unwrap_or(0),
+            "kind": v["kind"].as_str().unwrap_or("symbol"),
+            "name": v["name"].as_str(),
+            "parent": v["parent"].as_str(),
+            "text": util::snippet(v["signature"].as_str().unwrap_or("")),
+        }));
+    }
+    (total > 0).then_some((entries, total))
+}
+
+/// The keyword-scan fallback: definition lines tagged by their keyword. `name`
+/// and `parent` are null here — only rq resolves those.
+fn heuristic_outline(lines: &[&str], limit: usize) -> (Vec<Value>, usize) {
+    let mut outline = Vec::new();
+    let mut seen = 0usize;
+    for (i, l) in lines.iter().enumerate() {
+        if let Some(kind) = definition_kind(l) {
+            seen += 1;
+            if outline.len() < limit {
+                outline.push(json!({
+                    "line": i + 1,
+                    "kind": kind,
+                    "name": Value::Null,
+                    "parent": Value::Null,
+                    "text": util::snippet(l),
+                }));
+            }
+        }
+    }
+    (outline, seen)
 }
 
 fn read_symbol(a: &ReadArgs, lines: &[&str], hash: &str, lang: Option<&str>) -> Result<Outcome> {

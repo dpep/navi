@@ -23,6 +23,9 @@ fn raw(data: &Path, args: &[&str]) -> Vec<u8> {
         // Neutralize any ambient ripgrep config (e.g. smart/ignore-case) so the
         // default case behavior is deterministic across dev machines.
         .env("RIPGREP_CONFIG_PATH", "")
+        // Isolate rq's index too: `read --mode outline` may spawn `rq --symbols`,
+        // which must never open or touch the real ~/.local/share/rq DB.
+        .env("RQ_DB", data.join("rq.db"))
         .args(args)
         .output()
         .unwrap()
@@ -47,6 +50,7 @@ fn mcp(data: &Path, requests: &[Value]) -> Vec<Value> {
         .unwrap()
         .env("NAVI_DATA_DIR", data)
         .env("NAVI_TRASH_DIR", data.join("trash"))
+        .env("RQ_DB", data.join("rq.db"))
         .arg("mcp")
         .write_stdin(input)
         .output()
@@ -211,7 +215,17 @@ fn read_outline_lists_definitions() {
     assert_eq!(outline.len(), 2);
     assert_eq!(outline[0]["line"], 1);
     assert_eq!(outline[0]["kind"], "fn");
+    assert!(
+        outline[0].get("name").is_some(),
+        "entry carries a name field"
+    );
     assert_eq!(outline[1]["line"], 3);
+    // This temp dir isn't an rq-indexed repo, so outline falls back to the
+    // heuristic scan and says so — the rq-vs-scan gap stays visible.
+    assert!(
+        v["fallback_reason"].is_string(),
+        "heuristic fallback is reflected: {v}"
+    );
 }
 
 #[test]

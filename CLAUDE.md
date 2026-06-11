@@ -10,11 +10,11 @@ This is an MVP. The point right now is to get the surface in front of real agent
 
 ## Status (resume here)
 
-v0.11.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` (text / symbol / file / references) / `read` / `edit` (edits or creates) / `info` / `move` / `remove` / `undo` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `undo`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 41 hermetic e2e (`cargo test`), all green.
+v0.12.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` (text / symbol / file / references) / `read` / `edit` (edits or creates) / `info` / `move` / `remove` / `undo` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `undo`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 41 hermetic e2e (`cargo test`), all green.
 
-`locate --match references` is whole-word, textual (rg `-w` → grep `-w`), not semantic — it labels hits `kind: "reference"` and matches the identifier wherever it appears. `info` orients a fresh agent: repo root, vcs/branch, languages, per-ecosystem build/test/lint commands, package.json scripts, Makefile targets, and which navi backends are present — pure fs + read-only `git`, no search backend.
+`locate --match references` is whole-word, textual (rg `-w` → grep `-w`), not semantic — it labels hits `kind: "reference"` and matches the identifier wherever it appears. `info` orients a fresh agent: repo root, vcs/branch, languages, per-ecosystem build/test/lint commands, package.json scripts, Makefile targets, and which navi backends are present — pure fs + read-only `git`, no search backend. `read --mode outline` prefers `rq --symbols` (real kind/parent/signature, needs rq ≥ 0.24.0) and falls back to a keyword scan (`name`/`parent` null) when rq is absent or has nothing for the file — the fallback is reflected in `fallback_reason`.
 
-Next step is one of (see Roadmap for detail): reference-aware `move`/`remove` (the `references` resolver is the substrate); a richer, rq-enumerated outline (needs an rq whole-file symbol-listing mode it doesn't have yet).
+Next step is one of (see Roadmap for detail): reference-aware `move`/`remove` (the `references` resolver is the substrate).
 
 ## Architecture
 
