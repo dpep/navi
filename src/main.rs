@@ -97,6 +97,7 @@ fn dispatch(cmd: &Command) -> Result<Outcome> {
         Command::Locate(a) => commands::locate::run(a),
         Command::Read(a) => commands::read::run(a),
         Command::Edit(a) => commands::edit::run(a),
+        Command::Info(a) => commands::info::run(a),
         Command::Move(a) => commands::fsops::run_move(a),
         Command::Remove(a) => commands::fsops::run_remove(a),
         Command::Undo(a) => commands::undo::run(a),

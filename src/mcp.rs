@@ -177,6 +177,7 @@ fn build_command(name: &str, args: Value) -> std::result::Result<Command, String
         "locate" => Command::Locate(de(args)?),
         "read" => Command::Read(de(args)?),
         "edit" => Command::Edit(de(args)?),
+        "info" => Command::Info(de(args)?),
         "move" => Command::Move(de(args)?),
         "remove" => Command::Remove(de(args)?),
         "undo" => Command::Undo(de(args)?),
@@ -212,7 +213,7 @@ fn tool_specs() -> Value {
                 "properties": {
                     "query": { "type": "string", "description": "What to find." },
                     "paths": { "type": "array", "items": { "type": "string" }, "description": "Directories to search (default: current directory)." },
-                    "match": { "type": "string", "enum": ["text", "symbol", "file"], "default": "text", "description": "Match kind: content, symbol/definition, or filename." },
+                    "match": { "type": "string", "enum": ["text", "symbol", "file", "references"], "default": "text", "description": "Match kind: content, symbol/definition, filename, or references (whole-word usages of an identifier; textual, not semantic)." },
                     "lang": { "type": "string", "description": "Restrict to a language (e.g. rust, go, python)." },
                     "kind": { "type": "string", "description": "Restrict symbol kinds (rq): class, module, method, function." },
                     "fixed": { "type": "boolean", "default": false, "description": "Treat query as a literal string, not a regex." },
@@ -234,6 +235,16 @@ fn tool_specs() -> Value {
                     "range": { "type": "string", "description": "Line range for mode=range: A:B, A: (to end), :B (from start), or A." },
                     "symbol": { "type": "string", "description": "Symbol name for mode=symbol." },
                     "limit": { "type": "integer", "default": 400, "description": "Max lines / outline entries returned." }
+                }
+            }
+        },
+        {
+            "name": "info",
+            "description": "Orient in a repo: root, vcs/branch, languages, per-ecosystem build/test/lint commands, package.json scripts, Makefile targets, and which navi search backends are available here.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Directory to inspect (default: current directory)." }
                 }
             }
         },

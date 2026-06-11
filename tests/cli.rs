@@ -210,6 +210,7 @@ fn read_outline_lists_definitions() {
     let outline = v["result"]["outline"].as_array().unwrap();
     assert_eq!(outline.len(), 2);
     assert_eq!(outline[0]["line"], 1);
+    assert_eq!(outline[0]["kind"], "fn");
     assert_eq!(outline[1]["line"], 3);
 }
 
@@ -438,6 +439,48 @@ fn locate_by_filename() {
         .as_str()
         .unwrap()
         .ends_with("widget_loader.rs"));
+}
+
+#[test]
+fn locate_references_matches_whole_word_only() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    // `total` should match; `subtotal` and `totals` should not (whole-word).
+    std::fs::write(
+        work.path().join("f.rs"),
+        "let total = 1;\nlet subtotal = 2;\nlet totals = 3;\nprintln!(\"{total}\");\n",
+    )
+    .unwrap();
+
+    let v = run(
+        data.path(),
+        &[
+            "locate",
+            "total",
+            work.path().to_str().unwrap(),
+            "--match",
+            "references",
+        ],
+    );
+    let hits = v["result"]["hits"].as_array().unwrap();
+    assert_eq!(hits.len(), 2);
+    assert!(hits.iter().all(|h| h["kind"] == "reference"));
+    let lines: Vec<u64> = hits.iter().map(|h| h["line"].as_u64().unwrap()).collect();
+    assert_eq!(lines, vec![1, 4]);
+}
+
+#[test]
+fn info_reports_root_languages_and_commands() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    std::fs::write(work.path().join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
+
+    let v = run(data.path(), &["info", work.path().to_str().unwrap()]);
+    assert_eq!(v["ok"], true);
+    let r = &v["result"];
+    assert_eq!(r["languages"][0], "rust");
+    assert_eq!(r["projects"][0]["test"], "cargo test");
+    assert_eq!(r["backends"]["rg"], true);
 }
 
 #[test]
@@ -755,7 +798,7 @@ fn mcp_initialize_and_lists_the_tools() {
         .collect();
     assert_eq!(
         names,
-        ["locate", "read", "edit", "move", "remove", "undo", "miss"]
+        ["locate", "read", "info", "edit", "move", "remove", "undo", "miss"]
     );
 }
 

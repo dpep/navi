@@ -27,6 +27,8 @@ pub enum Command {
     /// Edit a file with a previewed, anchor-unique, hash-guarded change — or
     /// create it from --content when the path doesn't exist yet.
     Edit(EditArgs),
+    /// Orient in a repo: root, vcs, languages, build/test commands, backends.
+    Info(InfoArgs),
     /// Move or rename a file (previewed unless --confirm).
     Move(MoveArgs),
     /// Remove files to the trash (previewed, scope-guarded, restorable).
@@ -49,6 +51,7 @@ impl Command {
             Command::Locate(_) => "locate",
             Command::Read(_) => "read",
             Command::Edit(_) => "edit",
+            Command::Info(_) => "info",
             Command::Move(_) => "move",
             Command::Remove(_) => "remove",
             Command::Undo(_) => "undo",
@@ -66,6 +69,7 @@ impl Command {
                 json!({"match": format!("{:?}", a.match_kind), "lang": a.lang, "limit": a.limit, "ignore_case": a.ignore_case, "files_with_matches": a.files_with_matches})
             }
             Command::Read(a) => json!({"mode": format!("{:?}", a.mode), "limit": a.limit}),
+            Command::Info(_) => Value::Null,
             Command::Edit(a) => {
                 json!({"form": if a.anchor.is_some() {"anchor"} else {"range"}, "confirm": a.confirm})
             }
@@ -89,6 +93,9 @@ pub enum MatchKind {
     Symbol,
     /// Filename search (rg --files → find).
     File,
+    /// Usages of a symbol name — whole-word content search (rg → grep).
+    /// Textual, not semantic: matches the identifier wherever it appears.
+    References,
 }
 
 #[derive(Args, Deserialize)]
@@ -201,6 +208,13 @@ pub struct EditArgs {
     #[arg(long)]
     #[serde(default)]
     pub confirm: bool,
+}
+
+#[derive(Args, Deserialize)]
+pub struct InfoArgs {
+    /// Directory to inspect (default: current directory).
+    #[serde(default)]
+    pub path: Option<String>,
 }
 
 #[derive(Args, Deserialize)]

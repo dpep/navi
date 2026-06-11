@@ -10,9 +10,11 @@ This is an MVP. The point right now is to get the surface in front of real agent
 
 ## Status (resume here)
 
-v0.10.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` (edits or creates) / `move` / `remove` / `undo` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `undo`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 39 hermetic e2e (`cargo test`), all green.
+v0.11.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` (text / symbol / file / references) / `read` / `edit` (edits or creates) / `info` / `move` / `remove` / `undo` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `undo`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 41 hermetic e2e (`cargo test`), all green.
 
-Next step is one of (see Roadmap for detail): reference-aware `move`/`remove`.
+`locate --match references` is whole-word, textual (rg `-w` → grep `-w`), not semantic — it labels hits `kind: "reference"` and matches the identifier wherever it appears. `info` orients a fresh agent: repo root, vcs/branch, languages, per-ecosystem build/test/lint commands, package.json scripts, Makefile targets, and which navi backends are present — pure fs + read-only `git`, no search backend.
+
+Next step is one of (see Roadmap for detail): reference-aware `move`/`remove` (the `references` resolver is the substrate); a richer, rq-enumerated outline (needs an rq whole-file symbol-listing mode it doesn't have yet).
 
 ## Architecture
 
@@ -20,7 +22,7 @@ The crate is deliberately thin-at-the-edges:
 
 - `src/main.rs` — parse args, dispatch to a command, wrap the result in the shared envelope, record one telemetry event. No logic.
 - `src/cli.rs` — clap structs/enums only. The whole CLI surface lives here.
-- `src/commands/` — one module per command; this is where the logic is. `locate`, `read`, `edit`, `fsops` (move + remove), `undo`, `report` (report + miss).
+- `src/commands/` — one module per command; this is where the logic is. `locate`, `read`, `edit`, `info`, `fsops` (move + remove), `undo`, `report` (report + miss).
 - Sibling modules are I/O-light helpers: `backend` (tool detection + spawning), `output` (the envelope), `telemetry` (the feedback log), `journal` (before-images + undo substrate), `trashbin` (OS/managed trash + the move primitive undo uses), `paths` (state locations), `util` (hashing, lang maps, range parsing), `error` (structured errors).
 
 Keep `main.rs` and `cli.rs` boring. New behavior goes in a `commands/` module plus a helper module if it's reusable.
@@ -110,4 +112,4 @@ Bump the version when a change reaches the built binary (behavior, a flag, outpu
 
 - Reference-aware `move`/`remove`.
 - Telemetry retention beyond the 5 MB size-cap rotation: a rotated `.1` generation bounds the log at ~2x but still discards old history wholesale. Follow-ups: (3) roll-up/compaction — fold aged raw events into pre-aggregated daily counters so long-term trends survive cheaply; (4) time-based retention — drop events older than N days (e.g. on a `navi report --compact`). Either keeps `report` fast without losing the trend.
-- MCP transport: `navi mcp` (in `src/mcp.rs`) is a stdio JSON-RPC server exposing the result commands (`locate`/`read`/`edit`/`move`/`remove`/`undo`) plus `miss` (the feedback signal, handled outside `execute` since it's a meta command) as native tools. Result tools map `tools/call` arguments into the same clap `Args` structs (which also derive `serde::Deserialize`) and run through `main::execute`, so every MCP call feeds telemetry just like the CLI. It also serves the undo history as a read-only resource (`navi://undo-history`) via `resources/list`/`resources/read`. Tool/resource schemas are hand-written in `mcp.rs` — keep them in sync with `cli.rs` when args change. Remaining gaps: no MCP prompts, no streaming/progress, and `report` is not exposed as a tool.
+- MCP transport: `navi mcp` (in `src/mcp.rs`) is a stdio JSON-RPC server exposing the result commands (`locate`/`read`/`edit`/`info`/`move`/`remove`/`undo`) plus `miss` (the feedback signal, handled outside `execute` since it's a meta command) as native tools. Result tools map `tools/call` arguments into the same clap `Args` structs (which also derive `serde::Deserialize`) and run through `main::execute`, so every MCP call feeds telemetry just like the CLI. It also serves the undo history as a read-only resource (`navi://undo-history`) via `resources/list`/`resources/read`. Tool/resource schemas are hand-written in `mcp.rs` — keep them in sync with `cli.rs` when args change. Remaining gaps: no MCP prompts, no streaming/progress, and `report` is not exposed as a tool.

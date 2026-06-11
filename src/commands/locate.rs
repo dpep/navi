@@ -17,9 +17,12 @@ pub fn run(a: &LocateArgs) -> Result<Outcome> {
         a.paths.clone()
     };
     match a.match_kind {
-        MatchKind::Text => locate_text(a, &paths, &backends),
+        MatchKind::Text => locate_text(a, &paths, &backends, false, "text"),
         MatchKind::Symbol => locate_symbol(a, &paths, &backends),
         MatchKind::File => locate_file(a, &paths, &backends),
+        // References is whole-word content search for the identifier — textual,
+        // not semantic, so it rides the same rg/grep path as text.
+        MatchKind::References => locate_text(a, &paths, &backends, true, "reference"),
     }
 }
 
@@ -35,7 +38,17 @@ fn finish(hits: Vec<Value>, total: usize, backend: &str, fallback: Option<String
     o
 }
 
-fn locate_text(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome> {
+/// `word`: match the query as a whole word (`-w`) and as a literal — used by
+/// `references` to find usages of an identifier rather than a substring.
+/// `kind`: the label stamped on each hit (`text` vs `reference`).
+fn locate_text(
+    a: &LocateArgs,
+    paths: &[String],
+    b: &Backends,
+    word: bool,
+    kind: &str,
+) -> Result<Outcome> {
+    let fixed = a.fixed || word;
     if b.rg {
         // `-l` lists matching files; otherwise `--json` gives line-level hits.
         let mut args: Vec<String> = vec![if a.files_with_matches {
@@ -46,7 +59,10 @@ fn locate_text(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome
         if a.ignore_case {
             args.push("-i".into());
         }
-        if a.fixed {
+        if word {
+            args.push("-w".into());
+        }
+        if fixed {
             args.push("-F".into());
         }
         if let Some(g) = a.lang.as_deref().and_then(util::lang_glob) {
@@ -61,7 +77,7 @@ fn locate_text(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome
         let (hits, total) = if a.files_with_matches {
             parse_paths(&out.stdout, a.limit)
         } else {
-            parse_rg(&out.stdout, a.limit)
+            parse_rg(&out.stdout, a.limit, kind)
         };
         if hits.is_empty() && out.status.code() == Some(2) {
             let err = String::from_utf8_lossy(&out.stderr);
@@ -78,7 +94,10 @@ fn locate_text(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome
         if a.ignore_case {
             args.push("-i".into());
         }
-        if a.fixed {
+        if word {
+            args.push("-w".into());
+        }
+        if fixed {
             args.push("-F".into());
         }
         if let Some(g) = a.lang.as_deref().and_then(util::lang_glob) {
@@ -92,7 +111,7 @@ fn locate_text(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome
         let (hits, total) = if a.files_with_matches {
             parse_paths(&out.stdout, a.limit)
         } else {
-            parse_grep(&out.stdout, a.limit)
+            parse_grep(&out.stdout, a.limit, kind)
         };
         return Ok(finish(
             hits,
@@ -159,7 +178,7 @@ fn locate_symbol(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outco
         files_with_matches: a.files_with_matches,
         limit: a.limit,
     };
-    let o = locate_text(&as_text, paths, b)?;
+    let o = locate_text(&as_text, paths, b, false, "text")?;
     Ok(o.fallback("rq unavailable; literal text search for symbol name"))
 }
 
@@ -243,7 +262,7 @@ fn locate_file(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome
     ))
 }
 
-fn parse_rg(stdout: &[u8], limit: usize) -> (Vec<Value>, usize) {
+fn parse_rg(stdout: &[u8], limit: usize, kind: &str) -> (Vec<Value>, usize) {
     let text = String::from_utf8_lossy(stdout);
     let (mut hits, mut total) = (Vec::new(), 0usize);
     for line in text.lines() {
@@ -262,14 +281,14 @@ fn parse_rg(stdout: &[u8], limit: usize) -> (Vec<Value>, usize) {
         hits.push(json!({
             "path": d["path"]["text"].as_str().unwrap_or(""),
             "line": d["line_number"].as_u64().unwrap_or(0),
-            "kind": "text",
+            "kind": kind,
             "snippet": util::snippet(d["lines"]["text"].as_str().unwrap_or("")),
         }));
     }
     (hits, total)
 }
 
-fn parse_grep(stdout: &[u8], limit: usize) -> (Vec<Value>, usize) {
+fn parse_grep(stdout: &[u8], limit: usize, kind: &str) -> (Vec<Value>, usize) {
     let text = String::from_utf8_lossy(stdout);
     let (mut hits, mut total) = (Vec::new(), 0usize);
     for line in text.lines() {
@@ -281,7 +300,7 @@ fn parse_grep(stdout: &[u8], limit: usize) -> (Vec<Value>, usize) {
                     continue;
                 }
                 hits.push(json!({
-                    "path": p, "line": n, "kind": "text", "snippet": util::snippet(c),
+                    "path": p, "line": n, "kind": kind, "snippet": util::snippet(c),
                 }));
             }
         }

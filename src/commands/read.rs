@@ -112,10 +112,10 @@ fn read_outline(
     let mut outline = Vec::new();
     let mut seen = 0usize;
     for (i, l) in lines.iter().enumerate() {
-        if is_definition(l) {
+        if let Some(kind) = definition_kind(l) {
             seen += 1;
             if outline.len() < limit {
-                outline.push(json!({ "line": i + 1, "text": util::snippet(l) }));
+                outline.push(json!({ "line": i + 1, "kind": kind, "text": util::snippet(l) }));
             }
         }
     }
@@ -247,9 +247,14 @@ fn indent(line: &str) -> usize {
     line.chars().take_while(|c| *c == ' ' || *c == '\t').count()
 }
 
-/// Heuristic: does this line introduce a definition? Looks for a definition
-/// keyword among the first few tokens. Intentionally language-agnostic.
 fn is_definition(line: &str) -> bool {
+    definition_kind(line).is_some()
+}
+
+/// Heuristic: if this line introduces a definition, return the keyword that
+/// marks it (`fn`, `class`, `def`, …) — used as the outline entry's `kind`.
+/// Looks among the first few tokens. Intentionally language-agnostic.
+fn definition_kind(line: &str) -> Option<&'static str> {
     const KW: &[&str] = &[
         "fn",
         "func",
@@ -273,16 +278,16 @@ fn is_definition(line: &str) -> bool {
     ];
     let t = line.trim_start();
     if t.starts_with("//") || t.starts_with("/*") || t.starts_with('*') {
-        return false;
+        return None;
     }
     for (idx, word) in t.split(|c: char| c.is_whitespace() || c == '(').enumerate() {
         if idx >= 3 {
             break;
         }
         let w = word.trim_matches(|c: char| !c.is_alphanumeric());
-        if KW.contains(&w) {
-            return true;
+        if let Some(kw) = KW.iter().find(|k| **k == w) {
+            return Some(kw);
         }
     }
-    false
+    None
 }
