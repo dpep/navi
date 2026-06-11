@@ -150,6 +150,8 @@ fn tool_specs() -> Value {
                     "lang": { "type": "string", "description": "Restrict to a language (e.g. rust, go, python)." },
                     "kind": { "type": "string", "description": "Restrict symbol kinds (rq): class, module, method, function." },
                     "fixed": { "type": "boolean", "default": false, "description": "Treat query as a literal string, not a regex." },
+                    "ignore_case": { "type": "boolean", "default": false, "description": "Match case-insensitively (content search)." },
+                    "files_with_matches": { "type": "boolean", "default": false, "description": "Return only the paths of files containing a match, not each line (content search)." },
                     "limit": { "type": "integer", "default": 50, "description": "Max results." }
                 }
             }

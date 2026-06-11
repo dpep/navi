@@ -20,6 +20,9 @@ fn raw(data: &Path, args: &[&str]) -> Vec<u8> {
         .unwrap()
         .env("NAVI_DATA_DIR", data)
         .env("NAVI_TRASH_DIR", data.join("trash"))
+        // Neutralize any ambient ripgrep config (e.g. smart/ignore-case) so the
+        // default case behavior is deterministic across dev machines.
+        .env("RIPGREP_CONFIG_PATH", "")
         .args(args)
         .output()
         .unwrap()
@@ -95,6 +98,44 @@ fn locate_text_finds_the_match() {
     let hits = v["result"]["hits"].as_array().unwrap();
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0]["line"], 2);
+}
+
+#[test]
+fn locate_text_ignore_case_matches_mixed_case() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    std::fs::write(work.path().join("f.txt"), "Needle\nNEEDLE\nhay\n").unwrap();
+    let dir = work.path().to_str().unwrap();
+
+    // case-sensitive: lowercase query misses the capitalized matches
+    let sensitive = run(data.path(), &["locate", "needle", dir]);
+    assert_eq!(sensitive["result"]["hits"].as_array().unwrap().len(), 0);
+
+    // -i / --ignore-case: both capitalized variants match
+    let insensitive = run(data.path(), &["locate", "needle", dir, "--ignore-case"]);
+    assert_eq!(insensitive["result"]["hits"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn locate_text_files_with_matches_lists_paths_and_counts() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    std::fs::write(work.path().join("a.txt"), "needle\nneedle\n").unwrap();
+    std::fs::write(work.path().join("b.txt"), "needle\n").unwrap();
+    std::fs::write(work.path().join("c.txt"), "hay\n").unwrap();
+    let dir = work.path().to_str().unwrap();
+
+    let v = run(
+        data.path(),
+        &["locate", "needle", dir, "--files-with-matches"],
+    );
+    let hits = v["result"]["hits"].as_array().unwrap();
+    // two files contain the match (not three lines); each hit is a file path
+    assert_eq!(hits.len(), 2);
+    assert!(hits.iter().all(|h| h["kind"] == "file"));
+    // total match count is carried in the budget (returned + elided)
+    assert_eq!(v["budget"]["returned"], 2);
+    assert_eq!(v["budget"]["elided"], 0);
 }
 
 #[test]

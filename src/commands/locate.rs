@@ -37,7 +37,15 @@ fn finish(hits: Vec<Value>, total: usize, backend: &str, fallback: Option<String
 
 fn locate_text(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome> {
     if b.rg {
-        let mut args: Vec<String> = vec!["--json".into()];
+        // `-l` lists matching files; otherwise `--json` gives line-level hits.
+        let mut args: Vec<String> = vec![if a.files_with_matches {
+            "-l".into()
+        } else {
+            "--json".into()
+        }];
+        if a.ignore_case {
+            args.push("-i".into());
+        }
         if a.fixed {
             args.push("-F".into());
         }
@@ -50,7 +58,11 @@ fn locate_text(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome
         args.extend(paths.iter().cloned());
 
         let out = backend::run("rg", &as_refs(&args))?;
-        let (hits, total) = parse_rg(&out.stdout, a.limit);
+        let (hits, total) = if a.files_with_matches {
+            parse_paths(&out.stdout, a.limit)
+        } else {
+            parse_rg(&out.stdout, a.limit)
+        };
         if hits.is_empty() && out.status.code() == Some(2) {
             let err = String::from_utf8_lossy(&out.stderr);
             return Err(NaviError::new("search_failed", err.trim().to_string()));
@@ -58,7 +70,14 @@ fn locate_text(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome
         return Ok(finish(hits, total, "ripgrep", None));
     }
     if b.grep {
-        let mut args: Vec<String> = vec!["-rIn".into()];
+        let mut args: Vec<String> = vec![if a.files_with_matches {
+            "-rIl".into()
+        } else {
+            "-rIn".into()
+        }];
+        if a.ignore_case {
+            args.push("-i".into());
+        }
         if a.fixed {
             args.push("-F".into());
         }
@@ -70,7 +89,11 @@ fn locate_text(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome
         args.extend(paths.iter().cloned());
 
         let out = backend::run("grep", &as_refs(&args))?;
-        let (hits, total) = parse_grep(&out.stdout, a.limit);
+        let (hits, total) = if a.files_with_matches {
+            parse_paths(&out.stdout, a.limit)
+        } else {
+            parse_grep(&out.stdout, a.limit)
+        };
         return Ok(finish(
             hits,
             total,
@@ -82,6 +105,22 @@ fn locate_text(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome
         "no_backend",
         "no content-search backend found (need rg or grep)",
     ))
+}
+
+/// Parse a backend's file-list output (`rg -l` / `grep -l`): one path per line.
+fn parse_paths(stdout: &[u8], limit: usize) -> (Vec<Value>, usize) {
+    let text = String::from_utf8_lossy(stdout);
+    let (mut hits, mut total) = (Vec::new(), 0usize);
+    for line in text.lines() {
+        if line.is_empty() {
+            continue;
+        }
+        total += 1;
+        if hits.len() < limit {
+            hits.push(json!({ "path": line, "kind": "file" }));
+        }
+    }
+    (hits, total)
 }
 
 fn locate_symbol(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome> {
@@ -116,6 +155,8 @@ fn locate_symbol(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outco
         lang: a.lang.clone(),
         kind: None,
         fixed: true,
+        ignore_case: a.ignore_case,
+        files_with_matches: a.files_with_matches,
         limit: a.limit,
     };
     let o = locate_text(&as_text, paths, b)?;

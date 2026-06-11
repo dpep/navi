@@ -10,7 +10,7 @@ This is an MVP. The point right now is to get the surface in front of real agent
 
 ## Status (resume here)
 
-v0.8.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` (edits or creates) / `move` / `remove` / `undo` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `undo`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 35 hermetic e2e (`cargo test`), all green.
+v0.9.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` (edits or creates) / `move` / `remove` / `undo` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `undo`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 37 hermetic e2e (`cargo test`), all green.
 
 Next step is one of (see Roadmap for detail): reference-aware `move`/`remove`.
 

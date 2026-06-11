@@ -63,7 +63,7 @@ impl Command {
     pub fn args_summary(&self) -> Value {
         match self {
             Command::Locate(a) => {
-                json!({"match": format!("{:?}", a.match_kind), "lang": a.lang, "limit": a.limit})
+                json!({"match": format!("{:?}", a.match_kind), "lang": a.lang, "limit": a.limit, "ignore_case": a.ignore_case, "files_with_matches": a.files_with_matches})
             }
             Command::Read(a) => json!({"mode": format!("{:?}", a.mode), "limit": a.limit}),
             Command::Edit(a) => {
@@ -115,6 +115,14 @@ pub struct LocateArgs {
     #[arg(long)]
     #[serde(default)]
     pub fixed: bool,
+    /// Match case-insensitively (content search).
+    #[arg(short = 'i', long = "ignore-case")]
+    #[serde(default)]
+    pub ignore_case: bool,
+    /// Return only the paths of files containing a match, not each line (content search).
+    #[arg(short = 'l', long = "files-with-matches")]
+    #[serde(default)]
+    pub files_with_matches: bool,
     /// Max results.
     #[arg(long, default_value_t = 50)]
     #[serde(default = "default_locate_limit")]
