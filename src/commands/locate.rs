@@ -124,7 +124,7 @@ fn locate_symbol(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outco
 
 fn locate_file(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome> {
     let needle = a.query.to_lowercase();
-    if b.fd {
+    if let Some(fd_bin) = b.fd {
         // fd matches the filename natively, so no post-filter is needed.
         // --fixed-strings keeps it a literal substring match, consistent with
         // the `find -iname '*q*'` fallback rather than fd's default regex.
@@ -136,7 +136,7 @@ fn locate_file(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome
         args.push(a.query.clone());
         args.extend(paths.iter().cloned());
 
-        let out = backend::run("fd", &as_refs(&args))?;
+        let out = backend::run(fd_bin, &as_refs(&args))?;
         let text = String::from_utf8_lossy(&out.stdout);
         let (mut hits, mut total) = (Vec::new(), 0usize);
         for line in text.lines() {

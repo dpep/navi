@@ -10,7 +10,7 @@ This is an MVP. The point right now is to get the surface in front of real agent
 
 ## Status (resume here)
 
-v0.5.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` / `move` / `remove` / `restore` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `restore`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 31 hermetic e2e (`cargo test`), all green.
+v0.5.1, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` / `move` / `remove` / `restore` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `restore`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 31 hermetic e2e (`cargo test`), all green.
 
 Next step is one of (see Roadmap for detail): `rq` index onboarding or reference-aware `move`/`remove`.
 
@@ -109,6 +109,5 @@ Bump the version when a change reaches the built binary (behavior, a flag, outpu
 
 - `rq` requires a prebuilt index; onboarding should index or detect-and-prompt.
 - Reference-aware `move`/`remove`.
-- `fd` is detected as `fd` only; Debian/Ubuntu ship it as `fdfind`, so it goes undetected there and filename search falls back to `rg`. Detecting the `fdfind` alias would close the Linux gap.
 - Telemetry retention beyond the 5 MB size-cap rotation: a rotated `.1` generation bounds the log at ~2x but still discards old history wholesale. Follow-ups: (3) roll-up/compaction — fold aged raw events into pre-aggregated daily counters so long-term trends survive cheaply; (4) time-based retention — drop events older than N days (e.g. on a `navi report --compact`). Either keeps `report` fast without losing the trend.
 - MCP transport: `navi mcp` (in `src/mcp.rs`) is a stdio JSON-RPC server exposing the result commands (`locate`/`read`/`edit`/`move`/`remove`/`restore`) as native tools. It maps `tools/call` arguments into the same clap `Args` structs (which now also derive `serde::Deserialize`) and runs them through `main::execute`, so every MCP call feeds telemetry just like the CLI. Tool schemas are hand-written in `mcp.rs::tool_specs` — keep them in sync with `cli.rs` when args change. Remaining gaps: no MCP resources/prompts, no streaming/progress, and `report`/`miss` are not exposed as tools.

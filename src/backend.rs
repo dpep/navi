@@ -11,7 +11,9 @@ use crate::error::{NaviError, Result};
 pub struct Backends {
     pub rq: bool,
     pub rg: bool,
-    pub fd: bool,
+    /// The resolved `fd` binary name (`fd`, or `fdfind` on Debian/Ubuntu), or
+    /// `None` if neither is installed.
+    pub fd: Option<&'static str>,
     pub grep: bool,
     pub find: bool,
 }
@@ -21,7 +23,7 @@ impl Backends {
         Backends {
             rq: have("rq"),
             rg: have("rg"),
-            fd: have("fd"),
+            fd: have_any(&["fd", "fdfind"]),
             grep: have("grep"),
             find: have("find"),
         }
@@ -30,6 +32,11 @@ impl Backends {
 
 fn have(bin: &str) -> bool {
     which::which(bin).is_ok()
+}
+
+/// The first of `names` found on PATH, kept as a stable name for spawning.
+fn have_any(names: &[&'static str]) -> Option<&'static str> {
+    names.iter().copied().find(|n| have(n))
 }
 
 /// Run a tool and return its raw output. A nonzero exit is NOT an error here —
