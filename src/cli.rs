@@ -24,14 +24,14 @@ pub enum Command {
     Locate(LocateArgs),
     /// Read a file by full / outline / range / symbol — token-aware.
     Read(ReadArgs),
-    /// Edit a file with a previewed, anchor-unique, hash-guarded change — or
-    /// create it from --content when the path doesn't exist yet.
+    /// Edit a file with an anchor-unique, hash-guarded change — or create it
+    /// from --content when the path doesn't exist yet.
     Edit(EditArgs),
     /// Orient in a repo: root, vcs, languages, build/test commands, backends.
     Info(InfoArgs),
-    /// Move or rename a file (previewed unless --confirm).
+    /// Move or rename a file.
     Move(MoveArgs),
-    /// Remove files to the trash (previewed, scope-guarded, restorable).
+    /// Remove files to the trash — scope-guarded, restorable via undo.
     Remove(RemoveArgs),
     /// Undo a journaled edit / create / move / remove by transaction id.
     Undo(UndoArgs),
@@ -71,11 +71,11 @@ impl Command {
             Command::Read(a) => json!({"mode": format!("{:?}", a.mode), "limit": a.limit}),
             Command::Info(_) => Value::Null,
             Command::Edit(a) => {
-                json!({"form": if a.anchor.is_some() {"anchor"} else {"range"}, "confirm": a.confirm})
+                json!({"form": if a.anchor.is_some() {"anchor"} else {"range"}, "dry_run": a.dry_run})
             }
-            Command::Move(a) => json!({"confirm": a.confirm, "force": a.force}),
+            Command::Move(a) => json!({"dry_run": a.dry_run, "force": a.force}),
             Command::Remove(a) => {
-                json!({"count": a.paths.len(), "confirm": a.confirm, "force": a.force, "purge": a.purge})
+                json!({"count": a.paths.len(), "dry_run": a.dry_run, "force": a.force, "purge": a.purge})
             }
             Command::Undo(_) => Value::Null,
             _ => Value::Null,
@@ -204,10 +204,10 @@ pub struct EditArgs {
     #[arg(long = "base-hash")]
     #[serde(rename = "base_hash", default)]
     pub base_hash: Option<String>,
-    /// Apply the edit. Without this, navi only previews the diff.
-    #[arg(long)]
-    #[serde(default)]
-    pub confirm: bool,
+    /// Preview the diff without applying it.
+    #[arg(long = "dry-run")]
+    #[serde(rename = "dry_run", default)]
+    pub dry_run: bool,
 }
 
 #[derive(Args, Deserialize)]
@@ -223,10 +223,10 @@ pub struct MoveArgs {
     pub from: String,
     /// Destination path.
     pub to: String,
-    /// Apply the move. Without this, navi only previews.
-    #[arg(long)]
-    #[serde(default)]
-    pub confirm: bool,
+    /// Preview the move without applying it.
+    #[arg(long = "dry-run")]
+    #[serde(rename = "dry_run", default)]
+    pub dry_run: bool,
     /// Overwrite the destination if it exists.
     #[arg(long)]
     #[serde(default)]
@@ -238,10 +238,10 @@ pub struct RemoveArgs {
     /// Paths to remove.
     #[arg(required = true)]
     pub paths: Vec<String>,
-    /// Apply the removal. Without this, navi only previews.
-    #[arg(long)]
-    #[serde(default)]
-    pub confirm: bool,
+    /// Preview the removal without applying it.
+    #[arg(long = "dry-run")]
+    #[serde(rename = "dry_run", default)]
+    pub dry_run: bool,
     /// Bypass the scope guard for large removals.
     #[arg(long)]
     #[serde(default)]

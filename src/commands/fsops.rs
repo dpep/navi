@@ -1,6 +1,6 @@
 //! `move` and `remove` — destructive ops without reference checks (deferred),
-//! but with preview, a scope guard, a before-image journal, and trash-backed
-//! removal so `navi undo` can bring things back.
+//! but a scope guard, a before-image journal, and trash-backed removal mean
+//! `navi undo` can bring things back.
 
 use std::fs;
 use std::path::Path;
@@ -33,13 +33,13 @@ pub fn run_move(a: &MoveArgs) -> Result<Outcome> {
         .with_details(json!({ "to": a.to })));
     }
 
-    if !a.confirm {
+    if a.dry_run {
         return Ok(Outcome::new(json!({
             "applied": false,
             "from": a.from,
             "to": a.to,
             "overwrite": dst_exists,
-            "hint": "re-run with --confirm to apply",
+            "hint": "dry run: nothing moved",
         })));
     }
 
@@ -79,13 +79,13 @@ pub fn run_remove(a: &RemoveArgs) -> Result<Outcome> {
         })
         .collect();
 
-    if !a.confirm {
+    if a.dry_run {
         let n = targets.len();
         return Ok(Outcome::new(json!({
             "applied": false,
             "action": action,
             "targets": targets,
-            "hint": "re-run with --confirm to apply",
+            "hint": "dry run: nothing removed",
         }))
         .budget(n, 0, false));
     }

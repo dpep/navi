@@ -229,21 +229,15 @@ fn read_outline_lists_definitions() {
 }
 
 #[test]
-fn edit_previews_without_writing_then_applies_on_confirm() {
+fn edit_applies_by_default_and_dry_run_only_previews() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();
     let f = work.path().join("c.txt");
     std::fs::write(&f, "x = 1\n").unwrap();
     let path = f.to_str().unwrap();
 
+    // --dry-run previews without touching the file
     let preview = run(
-        data.path(),
-        &["edit", path, "--anchor", "x = 1", "--replace", "x = 2"],
-    );
-    assert_eq!(preview["result"]["applied"], false);
-    assert_eq!(std::fs::read_to_string(&f).unwrap(), "x = 1\n");
-
-    let applied = run(
         data.path(),
         &[
             "edit",
@@ -252,8 +246,16 @@ fn edit_previews_without_writing_then_applies_on_confirm() {
             "x = 1",
             "--replace",
             "x = 2",
-            "--confirm",
+            "--dry-run",
         ],
+    );
+    assert_eq!(preview["result"]["applied"], false);
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "x = 1\n");
+
+    // no flag: applies
+    let applied = run(
+        data.path(),
+        &["edit", path, "--anchor", "x = 1", "--replace", "x = 2"],
     );
     assert_eq!(applied["result"]["applied"], true);
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "x = 2\n");
@@ -266,17 +268,17 @@ fn edit_creates_a_new_file_and_undo_deletes_it() {
     let f = work.path().join("sub/new.rs");
     let path = f.to_str().unwrap();
 
-    // preview: nothing written, flagged as a creation
-    let preview = run(data.path(), &["edit", path, "--content", "fn x() {}\n"]);
+    // --dry-run: nothing written, flagged as a creation
+    let preview = run(
+        data.path(),
+        &["edit", path, "--content", "fn x() {}\n", "--dry-run"],
+    );
     assert_eq!(preview["result"]["applied"], false);
     assert_eq!(preview["result"]["created"], true);
     assert!(!f.exists());
 
-    // confirm: file (and its parent dir) created
-    let applied = run(
-        data.path(),
-        &["edit", path, "--content", "fn x() {}\n", "--confirm"],
-    );
+    // default: file (and its parent dir) created
+    let applied = run(data.path(), &["edit", path, "--content", "fn x() {}\n"]);
     assert_eq!(applied["result"]["created"], true);
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "fn x() {}\n");
 
@@ -313,15 +315,7 @@ fn edit_open_ended_range_replaces_to_end() {
 
     let applied = run(
         data.path(),
-        &[
-            "edit",
-            path,
-            "--range",
-            "2:",
-            "--content",
-            "new",
-            "--confirm",
-        ],
+        &["edit", path, "--range", "2:", "--content", "new"],
     );
     assert_eq!(applied["result"]["applied"], true);
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "keep\nnew\n");
@@ -391,7 +385,7 @@ fn remove_scope_guard_blocks_large_removals() {
 }
 
 #[test]
-fn move_previews_then_renames_on_confirm() {
+fn move_applies_by_default_and_dry_run_only_previews() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();
     let from = work.path().join("a.txt");
@@ -399,11 +393,11 @@ fn move_previews_then_renames_on_confirm() {
     std::fs::write(&from, "hi\n").unwrap();
     let (fp, tp) = (from.to_str().unwrap(), to.to_str().unwrap());
 
-    let preview = run(data.path(), &["move", fp, tp]);
+    let preview = run(data.path(), &["move", fp, tp, "--dry-run"]);
     assert_eq!(preview["result"]["applied"], false);
     assert!(from.exists() && !to.exists());
 
-    let applied = run(data.path(), &["move", fp, tp, "--confirm"]);
+    let applied = run(data.path(), &["move", fp, tp]);
     assert_eq!(applied["result"]["applied"], true);
     assert!(!from.exists() && to.exists());
 }
@@ -419,12 +413,7 @@ fn move_refuses_to_clobber_without_force() {
 
     let v = run(
         data.path(),
-        &[
-            "move",
-            from.to_str().unwrap(),
-            to.to_str().unwrap(),
-            "--confirm",
-        ],
+        &["move", from.to_str().unwrap(), to.to_str().unwrap()],
     );
     assert_eq!(v["error"]["code"], "destination_exists");
     assert_eq!(std::fs::read_to_string(&to).unwrap(), "b\n");
@@ -649,7 +638,6 @@ fn edit_range_replaces_lines() {
             "2:2",
             "--content",
             "B",
-            "--confirm",
         ],
     );
     assert_eq!(v["result"]["applied"], true);
@@ -657,13 +645,13 @@ fn edit_range_replaces_lines() {
 }
 
 #[test]
-fn remove_confirm_trashes_and_reports() {
+fn remove_trashes_and_reports() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();
     let f = work.path().join("gone.txt");
     std::fs::write(&f, "bye\n").unwrap();
 
-    let v = run(data.path(), &["remove", f.to_str().unwrap(), "--confirm"]);
+    let v = run(data.path(), &["remove", f.to_str().unwrap()]);
     assert_eq!(v["result"]["applied"], true);
     assert_eq!(v["result"]["action"], "trash");
     assert_eq!(v["result"]["restorable"], true);
@@ -678,7 +666,7 @@ fn remove_then_undo_brings_a_file_back() {
     let f = work.path().join("recover.txt");
     std::fs::write(&f, "important\n").unwrap();
 
-    let removed = run(data.path(), &["remove", f.to_str().unwrap(), "--confirm"]);
+    let removed = run(data.path(), &["remove", f.to_str().unwrap()]);
     assert!(!f.exists());
 
     let restored = run(data.path(), &["undo", txn_of(&removed)]);
@@ -695,7 +683,7 @@ fn remove_then_undo_brings_a_directory_back() {
     std::fs::create_dir(&dir).unwrap();
     std::fs::write(dir.join("mod.rs"), "fn x() {}\n").unwrap();
 
-    let removed = run(data.path(), &["remove", dir.to_str().unwrap(), "--confirm"]);
+    let removed = run(data.path(), &["remove", dir.to_str().unwrap()]);
     assert!(!dir.exists());
 
     run(data.path(), &["undo", txn_of(&removed)]);
@@ -713,10 +701,7 @@ fn purge_permanently_deletes_and_is_not_restorable() {
     let f = work.path().join("doomed.txt");
     std::fs::write(&f, "gone for good\n").unwrap();
 
-    let removed = run(
-        data.path(),
-        &["remove", f.to_str().unwrap(), "--purge", "--confirm"],
-    );
+    let removed = run(data.path(), &["remove", f.to_str().unwrap(), "--purge"]);
     assert_eq!(removed["result"]["action"], "purge");
     assert_eq!(removed["result"]["restorable"], false);
     assert!(!f.exists());
@@ -746,7 +731,6 @@ fn edit_then_undo_reverts_content() {
             "v = 1",
             "--replace",
             "v = 2",
-            "--confirm",
         ],
     );
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "v = 2\n");
@@ -765,12 +749,7 @@ fn move_then_undo_renames_back() {
 
     let moved = run(
         data.path(),
-        &[
-            "move",
-            from.to_str().unwrap(),
-            to.to_str().unwrap(),
-            "--confirm",
-        ],
+        &["move", from.to_str().unwrap(), to.to_str().unwrap()],
     );
     assert!(!from.exists() && to.exists());
 
@@ -866,7 +845,7 @@ fn mcp_undo_history_resource_lists_transactions() {
         data.path(),
         &[json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                  "params": {"name": "remove",
-                            "arguments": {"paths": [f.to_str().unwrap()], "confirm": true}}})],
+                            "arguments": {"paths": [f.to_str().unwrap()]}}})],
     );
     let txn = tool_envelope(&removed[0])["result"]["transaction_id"]
         .as_str()
@@ -908,7 +887,7 @@ fn mcp_edit_then_undo_round_trips() {
         data.path(),
         &[json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                  "params": {"name": "edit",
-                            "arguments": {"path": path, "anchor": "v = 1", "replace": "v = 2", "confirm": true}}})],
+                            "arguments": {"path": path, "anchor": "v = 1", "replace": "v = 2"}}})],
     );
     let txn = tool_envelope(&edited[0])["result"]["transaction_id"]
         .as_str()

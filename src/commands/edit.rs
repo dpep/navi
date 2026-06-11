@@ -1,6 +1,6 @@
-//! `edit` — safe, transactional write. Preview by default; anchors must be
-//! unique; an optional base hash rejects edits against a changed file. Applied
-//! edits journal a before-image first.
+//! `edit` — safe, transactional write. Anchors must be unique; an optional base
+//! hash rejects edits against a changed file. Applied edits journal a
+//! before-image first, so `undo` reverses them.
 
 use std::fs;
 
@@ -37,12 +37,12 @@ pub fn run(a: &EditArgs) -> Result<Outcome> {
     let new = compute_new(a, &old)?;
     let diff = unified_diff(&a.path, &old, &new);
 
-    if !a.confirm {
+    if a.dry_run {
         return Ok(Outcome::new(json!({
             "applied": false,
             "diff": diff,
             "content_hash": hash,
-            "hint": "re-run with --confirm to apply",
+            "hint": "dry run: nothing changed",
         })));
     }
 
@@ -74,12 +74,12 @@ fn create_file(a: &EditArgs) -> Result<Outcome> {
     }
 
     let diff = unified_diff(&a.path, "", content);
-    if !a.confirm {
+    if a.dry_run {
         return Ok(Outcome::new(json!({
             "applied": false,
             "created": true,
             "diff": diff,
-            "hint": "re-run with --confirm to create",
+            "hint": "dry run: nothing created",
         })));
     }
 

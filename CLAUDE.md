@@ -10,7 +10,7 @@ This is an MVP. The point right now is to get the surface in front of real agent
 
 ## Status (resume here)
 
-v0.12.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` (text / symbol / file / references) / `read` / `edit` (edits or creates) / `info` / `move` / `remove` / `undo` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `undo`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 41 hermetic e2e (`cargo test`), all green.
+v0.13.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` (text / symbol / file / references) / `read` / `edit` (edits or creates) / `info` / `move` / `remove` / `undo` / `report` / `miss` / `mcp` / `install`. `edit`/`move`/`remove` apply by default (low-friction, like built-in Read/Edit); `--dry-run` previews. `remove` is trash-backed and reversible via `undo`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 41 hermetic e2e (`cargo test`), all green.
 
 `locate --match references` is whole-word, textual (rg `-w` → grep `-w`), not semantic — it labels hits `kind: "reference"` and matches the identifier wherever it appears. `info` orients a fresh agent: repo root, vcs/branch, languages, per-ecosystem build/test/lint commands, package.json scripts, Makefile targets, and which navi backends are present — pure fs + read-only `git`, no search backend. `read --mode outline` prefers `rq --symbols` (real kind/parent/signature, needs rq ≥ 0.24.0) and falls back to a keyword scan (`name`/`parent` null) when rq is absent or has nothing for the file — the fallback is reflected in `fallback_reason`.
 
@@ -54,9 +54,9 @@ Note: `rq` auto-indexes the current repo on first search (resolved from cwd), so
 
 ## Safety model
 
-Mutations are preview-first and reversible-ish:
+Mutations apply by default and are reversible-ish — the friction lives in the guardrails (anchor uniqueness, base-hash, undo), not a confirm gate, so the surface feels like the built-in Read/Edit:
 
-- `edit`/`move`/`remove` preview by default; nothing touches disk without `--confirm`.
+- `edit`/`move`/`remove` apply by default; `--dry-run` returns the same plan/diff with `applied: false` and touches nothing. Race safety comes from anchor uniqueness + `--base-hash`, and applied mutations are reversible via `undo`.
 - `edit` on a path that doesn't exist creates it from `--content` (parent dirs included), journaled as `create`; anchor/range/base-hash are rejected there since they assume prior content.
 - `edit` anchors must match exactly once — 0 or >1 is an error (`anchor_not_found` / `anchor_ambiguous`). Never guess a location.
 - `edit --base-hash <h>` rejects the write if the file changed since it was read (`stale_base`). The hash comes from a prior `read`.

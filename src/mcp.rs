@@ -250,7 +250,7 @@ fn tool_specs() -> Value {
         },
         {
             "name": "edit",
-            "description": "Edit a file with a previewed, anchor-unique, hash-guarded change, or create it from content when the path doesn't exist. Previews unless confirm=true.",
+            "description": "Edit a file with an anchor-unique, hash-guarded change, or create it from content when the path doesn't exist. Set dry_run to preview the diff instead of applying.",
             "inputSchema": {
                 "type": "object",
                 "required": ["path"],
@@ -261,33 +261,33 @@ fn tool_specs() -> Value {
                     "range": { "type": "string", "description": "Line range to replace (use with content): A:B, A:, :B, or A." },
                     "content": { "type": "string", "description": "Replacement content for the range, or the body of a new file." },
                     "base_hash": { "type": "string", "description": "Expected current content hash from a prior read; edit is rejected if the file changed." },
-                    "confirm": { "type": "boolean", "default": false, "description": "Apply the edit. Without this, navi only previews the diff." }
+                    "dry_run": { "type": "boolean", "default": false, "description": "Preview the diff without applying it." }
                 }
             }
         },
         {
             "name": "move",
-            "description": "Move or rename a file. Previews unless confirm=true; refuses to clobber without force.",
+            "description": "Move or rename a file. Set dry_run to preview; refuses to clobber an existing destination without force.",
             "inputSchema": {
                 "type": "object",
                 "required": ["from", "to"],
                 "properties": {
                     "from": { "type": "string", "description": "Source path." },
                     "to": { "type": "string", "description": "Destination path." },
-                    "confirm": { "type": "boolean", "default": false, "description": "Apply the move. Without this, navi only previews." },
+                    "dry_run": { "type": "boolean", "default": false, "description": "Preview the move without applying it." },
                     "force": { "type": "boolean", "default": false, "description": "Overwrite the destination if it exists." }
                 }
             }
         },
         {
             "name": "remove",
-            "description": "Remove files to the trash (restorable). Previews unless confirm=true; scope-guarded.",
+            "description": "Remove files to the trash (restorable via undo). Set dry_run to preview; scope-guarded.",
             "inputSchema": {
                 "type": "object",
                 "required": ["paths"],
                 "properties": {
                     "paths": { "type": "array", "items": { "type": "string" }, "description": "Paths to remove." },
-                    "confirm": { "type": "boolean", "default": false, "description": "Apply the removal. Without this, navi only previews." },
+                    "dry_run": { "type": "boolean", "default": false, "description": "Preview the removal without applying it." },
                     "force": { "type": "boolean", "default": false, "description": "Bypass the scope guard for large removals." },
                     "purge": { "type": "boolean", "default": false, "description": "Permanently delete instead of trashing (not restorable)." }
                 }
