@@ -204,6 +204,50 @@ fn edit_previews_without_writing_then_applies_on_confirm() {
 }
 
 #[test]
+fn edit_creates_a_new_file_and_restore_deletes_it() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    let f = work.path().join("sub/new.rs");
+    let path = f.to_str().unwrap();
+
+    // preview: nothing written, flagged as a creation
+    let preview = run(data.path(), &["edit", path, "--content", "fn x() {}\n"]);
+    assert_eq!(preview["result"]["applied"], false);
+    assert_eq!(preview["result"]["created"], true);
+    assert!(!f.exists());
+
+    // confirm: file (and its parent dir) created
+    let applied = run(
+        data.path(),
+        &["edit", path, "--content", "fn x() {}\n", "--confirm"],
+    );
+    assert_eq!(applied["result"]["created"], true);
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "fn x() {}\n");
+
+    // restore removes the created file
+    let txn = txn_of(&applied);
+    let restored = run(data.path(), &["restore", txn]);
+    assert_eq!(restored["result"]["op"], "create");
+    assert!(!f.exists());
+}
+
+#[test]
+fn edit_create_rejects_anchor_inputs() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    let path = work.path().join("nope.txt");
+    let path = path.to_str().unwrap();
+
+    // no --content on a missing file is an error, not a silent empty create
+    let no_content = run(
+        data.path(),
+        &["edit", path, "--anchor", "x", "--replace", "y"],
+    );
+    assert_eq!(no_content["ok"], false);
+    assert_eq!(no_content["error"]["code"], "invalid_args");
+}
+
+#[test]
 fn edit_open_ended_range_replaces_to_end() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();

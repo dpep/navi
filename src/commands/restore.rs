@@ -20,6 +20,7 @@ pub fn run(a: &RestoreArgs) -> Result<Outcome> {
 
     let (restored, skipped) = match op {
         "edit" => restore_edit(&items)?,
+        "create" => restore_create(&items)?,
         "move" => restore_move(&items)?,
         "remove" => restore_remove(&items)?,
         other => {
@@ -55,6 +56,26 @@ fn restore_edit(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
         restored.push(json!({ "path": path }));
     }
     Ok((restored, Vec::new()))
+}
+
+/// Undo a create by deleting the file. A path already gone is skipped, not an
+/// error — the end state (absent) is what restore wants either way.
+fn restore_create(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {
+    let mut restored = Vec::new();
+    let mut skipped = Vec::new();
+    for it in items {
+        let path = match it["path"].as_str() {
+            Some(p) => p,
+            None => continue,
+        };
+        if Path::new(path).exists() {
+            fs::remove_file(path)?;
+            restored.push(json!({ "path": path }));
+        } else {
+            skipped.push(json!({ "path": path, "reason": "already absent" }));
+        }
+    }
+    Ok((restored, skipped))
 }
 
 fn restore_move(items: &[Value]) -> Result<(Vec<Value>, Vec<Value>)> {

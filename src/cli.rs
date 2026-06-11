@@ -24,7 +24,8 @@ pub enum Command {
     Locate(LocateArgs),
     /// Read a file by full / outline / range / symbol — token-aware.
     Read(ReadArgs),
-    /// Edit a file with a previewed, anchor-unique, hash-guarded change.
+    /// Edit a file with a previewed, anchor-unique, hash-guarded change — or
+    /// create it from --content when the path doesn't exist yet.
     Edit(EditArgs),
     /// Move or rename a file (previewed unless --confirm).
     Move(MoveArgs),
@@ -166,7 +167,7 @@ fn default_read_limit() -> usize {
 
 #[derive(Args, Deserialize)]
 pub struct EditArgs {
-    /// File to edit.
+    /// File to edit, or to create (when it doesn't exist) from --content.
     pub path: String,
     /// Unique anchor text to replace (use with --replace).
     #[arg(long)]

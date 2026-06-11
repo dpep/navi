@@ -171,16 +171,16 @@ fn tool_specs() -> Value {
         },
         {
             "name": "edit",
-            "description": "Edit a file with a previewed, anchor-unique, hash-guarded change. Previews unless confirm=true.",
+            "description": "Edit a file with a previewed, anchor-unique, hash-guarded change, or create it from content when the path doesn't exist. Previews unless confirm=true.",
             "inputSchema": {
                 "type": "object",
                 "required": ["path"],
                 "properties": {
-                    "path": { "type": "string", "description": "File to edit." },
+                    "path": { "type": "string", "description": "File to edit, or to create (when it doesn't exist) from content." },
                     "anchor": { "type": "string", "description": "Unique anchor text to replace (use with replace)." },
                     "replace": { "type": "string", "description": "Replacement for the anchor." },
                     "range": { "type": "string", "description": "Line range to replace (use with content): A:B, A:, :B, or A." },
-                    "content": { "type": "string", "description": "Replacement content for the range." },
+                    "content": { "type": "string", "description": "Replacement content for the range, or the body of a new file." },
                     "base_hash": { "type": "string", "description": "Expected current content hash from a prior read; edit is rejected if the file changed." },
                     "confirm": { "type": "boolean", "default": false, "description": "Apply the edit. Without this, navi only previews the diff." }
                 }

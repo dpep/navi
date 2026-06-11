@@ -14,6 +14,11 @@ use crate::output::Outcome;
 use crate::util;
 
 pub fn run(a: &EditArgs) -> Result<Outcome> {
+    // An absent target is a create: write a brand-new file from --content.
+    if !std::path::Path::new(&a.path).exists() {
+        return create_file(a);
+    }
+
     let bytes = fs::read(&a.path)
         .map_err(|e| NaviError::new("not_found", format!("cannot read {}: {e}", a.path)))?;
     let old = String::from_utf8_lossy(&bytes).into_owned();
@@ -48,6 +53,47 @@ pub fn run(a: &EditArgs) -> Result<Outcome> {
         "transaction_id": txn,
         "diff": diff,
         "content_hash": util::content_hash(new.as_bytes()),
+    })))
+}
+
+/// Create a new file from `--content`. Anchor/range/base-hash all assume prior
+/// content, so they're rejected here. Journaled as a `create` so `restore` can
+/// undo it by deleting the file.
+fn create_file(a: &EditArgs) -> Result<Outcome> {
+    let content = a.content.as_deref().ok_or_else(|| {
+        NaviError::new(
+            "invalid_args",
+            format!("{} does not exist; pass --content to create it", a.path),
+        )
+    })?;
+    if a.anchor.is_some() || a.range.is_some() || a.base_hash.is_some() {
+        return Err(NaviError::new(
+            "invalid_args",
+            "creating a new file takes only --content",
+        ));
+    }
+
+    let diff = unified_diff(&a.path, "", content);
+    if !a.confirm {
+        return Ok(Outcome::new(json!({
+            "applied": false,
+            "created": true,
+            "diff": diff,
+            "hint": "re-run with --confirm to create",
+        })));
+    }
+
+    if let Some(parent) = std::path::Path::new(&a.path).parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let txn = journal::record("create", vec![json!({ "path": a.path })]);
+    fs::write(&a.path, content)?;
+    Ok(Outcome::new(json!({
+        "applied": true,
+        "created": true,
+        "transaction_id": txn,
+        "diff": diff,
+        "content_hash": util::content_hash(content.as_bytes()),
     })))
 }
 

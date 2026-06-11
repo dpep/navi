@@ -1,7 +1,8 @@
-//! Before-image journal for every mutation (edit/move/remove). The substrate
-//! `navi restore` reverses from. Each entry is named by its transaction id and
-//! records exactly what's needed to undo the op:
+//! Before-image journal for every mutation (edit/create/move/remove). The
+//! substrate `navi restore` reverses from. Each entry is named by its
+//! transaction id and records exactly what's needed to undo the op:
 //!   edit   → [{ path, before }]                 (rewrite before-content)
+//!   create → [{ path }]                          (delete the created file)
 //!   move   → [{ from, to }]                     (rename to → from)
 //!   remove → [{ path, kind, trashed | purged }] (move trashed → path)
 

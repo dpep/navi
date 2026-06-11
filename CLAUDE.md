@@ -10,7 +10,7 @@ This is an MVP. The point right now is to get the surface in front of real agent
 
 ## Status (resume here)
 
-v0.6.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` / `move` / `remove` / `restore` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `restore`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 33 hermetic e2e (`cargo test`), all green.
+v0.7.0, on `main` (git@github.com:dpep/navi.git). Working: `locate` / `read` / `edit` (edits or creates) / `move` / `remove` / `restore` / `report` / `miss` / `mcp` / `install`. `remove` is trash-backed and reversible via `restore`; the telemetry feedback loop is wired; `navi mcp` serves the result commands as MCP tools over stdio; `navi install` registers that MCP server with Claude Code (user scope). Tests: 2 unit + 35 hermetic e2e (`cargo test`), all green.
 
 Next step is one of (see Roadmap for detail): reference-aware `move`/`remove`.
 
@@ -55,12 +55,13 @@ Note: `rq` auto-indexes the current repo on first search (resolved from cwd), so
 Mutations are preview-first and reversible-ish:
 
 - `edit`/`move`/`remove` preview by default; nothing touches disk without `--confirm`.
+- `edit` on a path that doesn't exist creates it from `--content` (parent dirs included), journaled as `create`; anchor/range/base-hash are rejected there since they assume prior content.
 - `edit` anchors must match exactly once — 0 or >1 is an error (`anchor_not_found` / `anchor_ambiguous`). Never guess a location.
 - `edit --base-hash <h>` rejects the write if the file changed since it was read (`stale_base`). The hash comes from a prior `read`.
 - `remove` refuses more than `SCOPE_THRESHOLD` (20) paths without `--force` (`scope_exceeded`).
 - `move` refuses to clobber an existing destination without `--force` (`destination_exists`).
 - `remove` sends to the trash (recoverable) by default; `--purge` permanently deletes and is journaled as not-restorable.
-- Every applied mutation writes a journal entry (`paths::journal_dir()`) and reports a `transaction_id`. `navi restore <txn>` reverses it: edit → rewrite before-content, move → rename back, remove → move the item out of the trash. The journal entry shape per op is documented at the top of `journal.rs`.
+- Every applied mutation writes a journal entry (`paths::journal_dir()`) and reports a `transaction_id`. `navi restore <txn>` reverses it: edit → rewrite before-content, create → delete the created file, move → rename back, remove → move the item out of the trash. The journal entry shape per op is documented at the top of `journal.rs`.
 
 Trash mechanism (`trashbin`): default is the OS trash via the `trash` crate — on macOS forced to `DeleteMethod::NsFileManager` because the crate's default Finder/AppleScript path times out headless and needs automation permission. We capture where the item landed so restore is navi's own move and doesn't need macOS's absent restore API:
 
