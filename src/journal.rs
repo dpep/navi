@@ -46,6 +46,44 @@ pub fn record(op: &str, items: Vec<Value>) -> String {
     txn
 }
 
+/// Summarize recent journaled transactions for the undo-history view: newest
+/// first, each `{ txn, op, ts, paths }`. Best-effort — unreadable or malformed
+/// entries are skipped rather than failing the listing.
+pub fn history(limit: usize) -> Vec<Value> {
+    let mut entries: Vec<Value> = Vec::new();
+    let Ok(rd) = fs::read_dir(paths::journal_dir()) else {
+        return entries;
+    };
+    for e in rd.flatten() {
+        let p = e.path();
+        if p.extension().and_then(|x| x.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(s) = fs::read_to_string(&p) else {
+            continue;
+        };
+        let Ok(v) = serde_json::from_str::<Value>(&s) else {
+            continue;
+        };
+        let paths: Vec<&str> = v["items"]
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|it| it["path"].as_str().or_else(|| it["from"].as_str()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        entries.push(json!({
+            "txn": v["txn"], "op": v["op"], "ts": v["ts"], "paths": paths,
+        }));
+    }
+    // newest first by timestamp (rfc3339 sorts lexically)
+    entries.sort_by(|a, b| b["ts"].as_str().cmp(&a["ts"].as_str()));
+    entries.truncate(limit);
+    entries
+}
+
 /// Load a journal entry for undo.
 pub fn load(txn: &str) -> Result<Value> {
     let path = paths::journal_dir().join(format!("{txn}.json"));

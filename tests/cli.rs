@@ -753,7 +753,10 @@ fn mcp_initialize_and_lists_the_tools() {
         .iter()
         .map(|t| t["name"].as_str().unwrap())
         .collect();
-    assert_eq!(names, ["locate", "read", "edit", "move", "remove", "undo"]);
+    assert_eq!(
+        names,
+        ["locate", "read", "edit", "move", "remove", "undo", "miss"]
+    );
 }
 
 #[test]
@@ -773,6 +776,67 @@ fn mcp_tools_call_runs_a_command() {
     let env = tool_envelope(&resps[0]);
     assert_eq!(env["ok"], true);
     assert_eq!(env["result"]["hits"][0]["line"], 2);
+}
+
+#[test]
+fn mcp_miss_tool_records_to_the_feedback_log() {
+    let data = tempdir().unwrap();
+
+    let resps = mcp(
+        data.path(),
+        &[json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                 "params": {"name": "miss",
+                            "arguments": {"note": "symbol search came back empty", "tool": "locate"}}})],
+    );
+    assert_eq!(resps[0]["result"]["isError"], false);
+    assert_eq!(tool_envelope(&resps[0])["recorded"], true);
+
+    // it lands in the same telemetry log `report` reads
+    let report = String::from_utf8(raw(data.path(), &["report"])).unwrap();
+    assert!(report.contains("misses: 1"), "report: {report}");
+    assert!(report.contains("symbol search came back empty"));
+}
+
+#[test]
+fn mcp_undo_history_resource_lists_transactions() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    let f = work.path().join("doomed.txt");
+    std::fs::write(&f, "bye\n").unwrap();
+
+    // a removal creates a journaled transaction
+    let removed = mcp(
+        data.path(),
+        &[json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                 "params": {"name": "remove",
+                            "arguments": {"paths": [f.to_str().unwrap()], "confirm": true}}})],
+    );
+    let txn = tool_envelope(&removed[0])["result"]["transaction_id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // the resource lists it
+    let listed = mcp(
+        data.path(),
+        &[json!({"jsonrpc": "2.0", "id": 2, "method": "resources/list"})],
+    );
+    let uri = listed[0]["result"]["resources"][0]["uri"].as_str().unwrap();
+    assert_eq!(uri, "navi://undo-history");
+
+    let read = mcp(
+        data.path(),
+        &[
+            json!({"jsonrpc": "2.0", "id": 3, "method": "resources/read",
+                 "params": {"uri": "navi://undo-history"}}),
+        ],
+    );
+    let text = read[0]["result"]["contents"][0]["text"].as_str().unwrap();
+    let body: Value = serde_json::from_str(text).unwrap();
+    let txns = body["transactions"].as_array().unwrap();
+    assert_eq!(txns.len(), 1);
+    assert_eq!(txns[0]["txn"], txn);
+    assert_eq!(txns[0]["op"], "remove");
 }
 
 #[test]

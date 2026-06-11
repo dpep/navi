@@ -1,6 +1,7 @@
 //! MCP stdio transport: exposes navi's result-bearing commands as native MCP
 //! tools, so an agent can call `locate`/`read`/`edit`/`move`/`remove`/`undo`
-//! as tools instead of shelling out and re-parsing text.
+//! (plus `miss`, the feedback signal) instead of shelling out and re-parsing
+//! text. It also serves the undo history as a read-only MCP resource.
 //!
 //! The command logic is transport-agnostic. This module only speaks JSON-RPC
 //! 2.0 over line-delimited stdio (the MCP stdio framing — one message per line,
@@ -18,6 +19,9 @@ use crate::cli::Command;
 /// Echoed back to clients that don't pin a version. We mirror the client's
 /// requested `protocolVersion` when it sends one (see `initialize_result`).
 const PROTOCOL_VERSION: &str = "2025-06-18";
+
+/// The single resource navi serves: the list of reversible transactions.
+const UNDO_HISTORY_URI: &str = "navi://undo-history";
 
 /// Read JSON-RPC messages line by line from stdin and answer on stdout until
 /// the stream closes. Requests get a response; notifications (no `id`) don't.
@@ -59,6 +63,11 @@ fn handle(req: &Value) -> Option<Value> {
             Ok(result) => success(id, result),
             Err((code, msg)) => error(id, code, &msg),
         },
+        "resources/list" => success(id, json!({ "resources": resource_specs() })),
+        "resources/read" => match read_resource(req) {
+            Ok(result) => success(id, result),
+            Err((code, msg)) => error(id, code, &msg),
+        },
         "ping" => success(id, json!({})),
         _ => error(id, -32601, "method not found"),
     })
@@ -71,7 +80,7 @@ fn initialize_result(req: &Value) -> Value {
         .unwrap_or(PROTOCOL_VERSION);
     json!({
         "protocolVersion": version,
-        "capabilities": { "tools": {} },
+        "capabilities": { "tools": {}, "resources": {} },
         "serverInfo": { "name": "navi", "version": env!("CARGO_PKG_VERSION") },
     })
 }
@@ -90,6 +99,13 @@ fn call_tool(req: &Value) -> std::result::Result<Value, (i64, String)> {
         .cloned()
         .unwrap_or_else(|| json!({}));
 
+    // `miss` is a feedback signal, not a result-bearing command — it records
+    // directly and never runs through execute/dispatch (which would panic on a
+    // meta command, and whose stdout println would corrupt the JSON-RPC stream).
+    if name == "miss" {
+        return miss_tool(&args);
+    }
+
     let cmd = build_command(name, args).map_err(|m| (-32602, m))?;
     let (env, ok) = crate::execute(&cmd);
     let text = serde_json::to_string_pretty(&env).unwrap_or_else(|_| "{}".into());
@@ -97,6 +113,56 @@ fn call_tool(req: &Value) -> std::result::Result<Value, (i64, String)> {
     Ok(json!({
         "content": [ { "type": "text", "text": text } ],
         "isError": !ok,
+    }))
+}
+
+/// Record a `miss` and return its acknowledgement. Mirrors the CLI's `miss`
+/// shape without printing (stdout is the JSON-RPC channel here).
+fn miss_tool(args: &Value) -> std::result::Result<Value, (i64, String)> {
+    let note = args
+        .get("note")
+        .and_then(Value::as_str)
+        .ok_or((-32602, "missing 'note'".to_string()))?;
+    let tool = args.get("tool").and_then(Value::as_str);
+    crate::telemetry::log_miss(note, tool);
+    let env =
+        json!({ "tool": "miss", "ok": true, "recorded": true, "note": note, "ref_tool": tool });
+    let text = serde_json::to_string_pretty(&env).unwrap_or_else(|_| "{}".into());
+    Ok(json!({
+        "content": [ { "type": "text", "text": text } ],
+        "isError": false,
+    }))
+}
+
+/// The resource catalogue returned by `resources/list`.
+fn resource_specs() -> Value {
+    json!([
+        {
+            "uri": UNDO_HISTORY_URI,
+            "name": "Undo history",
+            "description": "Reversible navi transactions, newest first. Undo one with the undo tool and its txn.",
+            "mimeType": "application/json",
+        }
+    ])
+}
+
+/// Serve a resource by URI. Only the undo history is published.
+fn read_resource(req: &Value) -> std::result::Result<Value, (i64, String)> {
+    let uri = req
+        .pointer("/params/uri")
+        .and_then(Value::as_str)
+        .ok_or((-32602, "missing resource uri".to_string()))?;
+    if uri != UNDO_HISTORY_URI {
+        return Err((-32602, format!("unknown resource: {uri}")));
+    }
+    let body = json!({ "transactions": crate::journal::history(50) });
+    let text = serde_json::to_string_pretty(&body).unwrap_or_else(|_| "{}".into());
+    Ok(json!({
+        "contents": [ {
+            "uri": uri,
+            "mimeType": "application/json",
+            "text": text,
+        } ],
     }))
 }
 
@@ -224,6 +290,18 @@ fn tool_specs() -> Value {
                 "required": ["txn"],
                 "properties": {
                     "txn": { "type": "string", "description": "Transaction id reported by a prior edit / move / remove." }
+                }
+            }
+        },
+        {
+            "name": "miss",
+            "description": "Record that a navi result was unhelpful — the explicit feedback signal that feeds `navi report`. Use it when a tool returned the wrong thing, missed something, or fell short.",
+            "inputSchema": {
+                "type": "object",
+                "required": ["note"],
+                "properties": {
+                    "note": { "type": "string", "description": "What went wrong or what you expected instead." },
+                    "tool": { "type": "string", "description": "Which navi tool produced the unhelpful result (optional)." }
                 }
             }
         }
