@@ -146,7 +146,7 @@ pub struct ReadArgs {
     #[arg(long = "mode", value_enum, default_value_t = ReadMode::Full)]
     #[serde(default)]
     pub mode: ReadMode,
-    /// Line range for mode=range, e.g. 40:80.
+    /// Line range for mode=range: A:B, A: (to end), :B (from start), or A.
     #[arg(long)]
     #[serde(default)]
     pub range: Option<String>,
@@ -176,7 +176,7 @@ pub struct EditArgs {
     #[arg(long)]
     #[serde(default)]
     pub replace: Option<String>,
-    /// Line range A:B to replace (use with --content).
+    /// Line range to replace (use with --content): A:B, A:, :B, or A.
     #[arg(long)]
     #[serde(default)]
     pub range: Option<String>,

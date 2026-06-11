@@ -125,6 +125,37 @@ fn read_range_returns_the_slice_with_a_hash() {
 }
 
 #[test]
+fn read_open_ended_ranges() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    let f = work.path().join("f.txt");
+    std::fs::write(&f, "one\ntwo\nthree\nfour\n").unwrap();
+    let path = f.to_str().unwrap();
+    let read = |spec: &str| {
+        run(
+            data.path(),
+            &["read", path, "--mode", "range", "--range", spec],
+        )
+    };
+
+    // "A:" runs to end of file
+    let to_end = read("3:");
+    assert_eq!(to_end["result"]["text"], "three\nfour");
+    assert_eq!(to_end["result"]["end_line"], 4);
+
+    // ":B" starts from the top
+    let from_start = read(":2");
+    assert_eq!(from_start["result"]["text"], "one\ntwo");
+    assert_eq!(from_start["result"]["start_line"], 1);
+
+    // bare "A" is the single line A
+    let single = read("3");
+    assert_eq!(single["result"]["text"], "three");
+    assert_eq!(single["result"]["start_line"], 3);
+    assert_eq!(single["result"]["end_line"], 3);
+}
+
+#[test]
 fn read_outline_lists_definitions() {
     let work = tempdir().unwrap();
     let data = tempdir().unwrap();
@@ -170,6 +201,30 @@ fn edit_previews_without_writing_then_applies_on_confirm() {
     );
     assert_eq!(applied["result"]["applied"], true);
     assert_eq!(std::fs::read_to_string(&f).unwrap(), "x = 2\n");
+}
+
+#[test]
+fn edit_open_ended_range_replaces_to_end() {
+    let work = tempdir().unwrap();
+    let data = tempdir().unwrap();
+    let f = work.path().join("c.txt");
+    std::fs::write(&f, "keep\ndrop\ndrop\n").unwrap();
+    let path = f.to_str().unwrap();
+
+    let applied = run(
+        data.path(),
+        &[
+            "edit",
+            path,
+            "--range",
+            "2:",
+            "--content",
+            "new",
+            "--confirm",
+        ],
+    );
+    assert_eq!(applied["result"]["applied"], true);
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "keep\nnew\n");
 }
 
 #[test]

@@ -36,7 +36,7 @@ pub fn run(a: &ReadArgs) -> Result<Outcome> {
                 .range
                 .as_deref()
                 .ok_or_else(|| NaviError::new("invalid_args", "--range required for mode=range"))?;
-            let (start, end) = util::parse_range(s)?;
+            let (start, end) = util::parse_range(s, lines.len())?;
             Ok(read_range(
                 &a.path, &lines, start, end, a.limit, &hash, lang, "range",
             ))

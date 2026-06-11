@@ -163,7 +163,7 @@ fn tool_specs() -> Value {
                 "properties": {
                     "path": { "type": "string", "description": "File to read." },
                     "mode": { "type": "string", "enum": ["full", "outline", "range", "symbol"], "default": "full", "description": "How to read it." },
-                    "range": { "type": "string", "description": "Line range for mode=range, e.g. 40:80." },
+                    "range": { "type": "string", "description": "Line range for mode=range: A:B, A: (to end), :B (from start), or A." },
                     "symbol": { "type": "string", "description": "Symbol name for mode=symbol." },
                     "limit": { "type": "integer", "default": 400, "description": "Max lines / outline entries returned." }
                 }
@@ -179,7 +179,7 @@ fn tool_specs() -> Value {
                     "path": { "type": "string", "description": "File to edit." },
                     "anchor": { "type": "string", "description": "Unique anchor text to replace (use with replace)." },
                     "replace": { "type": "string", "description": "Replacement for the anchor." },
-                    "range": { "type": "string", "description": "Line range A:B to replace (use with content)." },
+                    "range": { "type": "string", "description": "Line range to replace (use with content): A:B, A:, :B, or A." },
                     "content": { "type": "string", "description": "Replacement content for the range." },
                     "base_hash": { "type": "string", "description": "Expected current content hash from a prior read; edit is rejected if the file changed." },
                     "confirm": { "type": "boolean", "default": false, "description": "Apply the edit. Without this, navi only previews the diff." }

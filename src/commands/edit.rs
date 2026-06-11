@@ -79,10 +79,10 @@ fn compute_new(a: &EditArgs, old: &str) -> Result<String> {
             .content
             .as_ref()
             .ok_or_else(|| NaviError::new("invalid_args", "--range requires --content"))?;
-        let (s, e) = util::parse_range(a.range.as_ref().unwrap())?;
         let lines: Vec<&str> = old.lines().collect();
         let total = lines.len();
-        if s < 1 || e > total {
+        let (s, e) = util::parse_range(a.range.as_ref().unwrap(), total)?;
+        if e > total {
             return Err(NaviError::new("invalid_args", "range out of bounds")
                 .with_details(json!({ "total_lines": total })));
         }

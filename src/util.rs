@@ -7,19 +7,18 @@ use crate::error::{NaviError, Result};
 
 const SNIPPET_MAX: usize = 200;
 
-/// Parse a 1-based inclusive "A:B" line range.
-pub fn parse_range(s: &str) -> Result<(usize, usize)> {
-    let (a, b) = s
-        .split_once(':')
-        .ok_or_else(|| NaviError::new("invalid_args", "range must be A:B, e.g. 40:80"))?;
-    let a: usize = a
-        .trim()
-        .parse()
-        .map_err(|_| NaviError::new("invalid_args", "range start is not a number"))?;
-    let b: usize = b
-        .trim()
-        .parse()
-        .map_err(|_| NaviError::new("invalid_args", "range end is not a number"))?;
+/// Parse a 1-based inclusive line range against a file of `total` lines.
+/// Forms: "A:B" (closed), "A:" (A to end), ":B" (start to B), "A" (line A).
+/// A missing end resolves to 1 (start) or `total` (end); an explicit end is
+/// returned as-is so callers keep their own clamping/bounds behavior.
+pub fn parse_range(s: &str, total: usize) -> Result<(usize, usize)> {
+    let (a, b) = match s.trim().split_once(':') {
+        Some((start, end)) => (range_end(start, 1)?, range_end(end, total)?),
+        None => {
+            let n = range_num(s)?;
+            (n, n)
+        }
+    };
     if a < 1 || b < a {
         return Err(NaviError::new(
             "invalid_args",
@@ -27,6 +26,24 @@ pub fn parse_range(s: &str) -> Result<(usize, usize)> {
         ));
     }
     Ok((a, b))
+}
+
+/// One side of a range: empty falls back to `default`, else a line number.
+fn range_end(s: &str, default: usize) -> Result<usize> {
+    if s.trim().is_empty() {
+        Ok(default)
+    } else {
+        range_num(s)
+    }
+}
+
+fn range_num(s: &str) -> Result<usize> {
+    s.trim().parse().map_err(|_| {
+        NaviError::new(
+            "invalid_args",
+            "range must be A:B, A:, :B, or A (line numbers), e.g. 40:80",
+        )
+    })
 }
 
 pub fn content_hash(bytes: &[u8]) -> String {
