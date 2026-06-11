@@ -62,7 +62,7 @@ Mutations apply by default and are reversible-ish — the friction lives in the 
 - `edit --base-hash <h>` rejects the write if the file changed since it was read (`stale_base`). The hash comes from a prior `read`.
 - `remove` refuses more than `SCOPE_THRESHOLD` (20) paths without `--force` (`scope_exceeded`).
 - `move` refuses to clobber an existing destination without `--force` (`destination_exists`).
-- `remove` sends to the trash (recoverable) by default; `--purge` permanently deletes and is journaled as not-restorable.
+- `remove` sends to the trash (recoverable) by default; `--purge` permanently deletes and is journaled as not-restorable. `--purge` is itself the deliberate, explicit opt-in (no extra confirm); bulk purges still trip the scope guard like any large removal.
 - Every applied mutation writes a journal entry (`paths::journal_dir()`) and reports a `transaction_id`. `navi undo <txn>` reverses it: edit → rewrite before-content, create → delete the created file, move → rename back, remove → move the item out of the trash. The journal entry shape per op is documented at the top of `journal.rs`.
 
 Trash mechanism (`trashbin`): default is the OS trash via the `trash` crate — on macOS forced to `DeleteMethod::NsFileManager` because the crate's default Finder/AppleScript path times out headless and needs automation permission. We capture where the item landed so undo is navi's own move and doesn't need macOS's absent restore API:
