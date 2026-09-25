@@ -17,6 +17,12 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      # navi shells out to ripgrep for its content-search backend, and `info`
+      # reports which backends a machine actually has. Without it the runner
+      # reports `rg: false` — correctly — and the test that asserts the backend
+      # is present fails, which is what has kept main red.
+      - name: Install search backends
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
       - name: Format
         run: cargo fmt --check
       - name: Clippy
