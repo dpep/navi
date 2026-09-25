@@ -215,6 +215,14 @@ fn read_outline_lists_definitions() {
     assert_eq!(outline.len(), 2);
     assert_eq!(outline[0]["line"], 1);
     assert_eq!(outline[0]["kind"], "fn");
+    // Whichever backend answered, the gap is visible rather than silent: rq
+    // reports a sentinel when it matched nothing, and counting that as a symbol
+    // is what once returned a single nameless entry here instead of falling
+    // back to the scan.
+    assert!(
+        v["backend"] == "rq" || v["fallback_reason"].is_string(),
+        "a scan-backed outline must say why it did not use rq: {v}"
+    );
     assert!(
         outline[0].get("name").is_some(),
         "entry carries a name field"
