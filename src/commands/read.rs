@@ -157,6 +157,13 @@ fn rq_outline(path: &str, limit: usize) -> Option<(Vec<Value>, usize)> {
             Ok(v) => v,
             Err(_) => continue,
         };
+        // rq closes with a sentinel envelope when it matched nothing —
+        // `{"status":"no_match"}` — which parses as JSON but is not a symbol.
+        // Counting it made `total` 1, so this returned Some(one nameless entry
+        // at line 0) and the heuristic fallback below never ran.
+        if v.get("status").is_some() {
+            continue;
+        }
         total += 1;
         if entries.len() >= limit {
             continue;
