@@ -10,6 +10,8 @@
 //! still feeds telemetry. The tool output is the exact response envelope.
 
 use std::io::{self, BufRead, Write};
+use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
@@ -26,9 +28,19 @@ const UNDO_HISTORY_URI: &str = "navi://undo-history";
 /// Read JSON-RPC messages line by line from stdin and answer on stdout until
 /// the stream closes. Requests get a response; notifications (no `id`) don't.
 pub fn run() {
+    let launched_from = launch_path().and_then(stamp_of);
     let stdin = io::stdin();
     let stdout = io::stdout();
     let mut out = stdout.lock();
+
+    // The client is still holding the tool list of the build we replaced, and
+    // it cannot know to re-ask: from where it sits, nothing happened.
+    if std::env::var_os(RESTARTED).is_some() {
+        write_msg(
+            &mut out,
+            &json!({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}),
+        );
+    }
 
     for line in stdin.lock().lines() {
         let Ok(line) = line else { break };
@@ -43,7 +55,102 @@ pub fn run() {
             }
             Err(_) => write_msg(&mut out, &error(Value::Null, -32700, "parse error")),
         }
+        // **Here, and nowhere else.** This is the one thread that takes bytes
+        // off stdin, so the safe moment to become another program is the one
+        // where it holds none: after answering for what it read, before
+        // reading again. Anything that arrives during the swap stays in the
+        // pipe and the new build reads it.
+        if let Some(newer) = superseded(&launched_from) {
+            become_new_build(&newer);
+        }
     }
+}
+
+/// Set across the `exec` so the replacement knows it replaced a build, which it
+/// has no other way to tell — everything else about the two invocations is
+/// identical.
+const RESTARTED: &str = "NAVI_MCP_RESTARTED";
+
+/// A binary's identity on disk.
+///
+/// **The inode is the load-bearing field.** An installer stages a new file and
+/// renames it over the path, which always gives a new inode — but not always a
+/// new mtime, because a clone on APFS carries the original's timestamps across.
+/// Size and mtime sit beside it for a rewrite in place, which is not how
+/// anything installs but is how a build script might.
+#[derive(PartialEq)]
+struct Stamp {
+    path: PathBuf,
+    inode: u64,
+    len: u64,
+    modified: SystemTime,
+}
+
+fn stamp_of(path: PathBuf) -> Option<Stamp> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = std::fs::metadata(&path).ok()?;
+    Some(Stamp {
+        path,
+        inode: meta.ino(),
+        len: meta.len(),
+        modified: meta.modified().ok()?,
+    })
+}
+
+/// The path to watch: the name this process was launched *as*, rather than the
+/// file that name resolves to right now.
+///
+/// `current_exe()` is the obvious source and is wrong on Linux, where it reads
+/// `/proc/self/exe` and so resolves through the symlink. navi installs through
+/// the tap, and `brew upgrade` moves the *link* — a new Cellar directory, the
+/// old file left alone — so nothing the resolved path watched would move.
+/// macOS reports the path as invoked. Reading argv[0] makes the two agree.
+///
+/// `stamp_of` still follows the link, which is the point: a rebuild and a
+/// relink become one event, because either way the name comes to rest on a
+/// different inode than the one being served.
+fn launch_path() -> Option<PathBuf> {
+    let argv0 = PathBuf::from(std::env::args_os().next()?);
+    if argv0.as_os_str().is_empty() {
+        return None;
+    }
+    if argv0.components().count() > 1 {
+        return match argv0.is_absolute() {
+            true => Some(argv0),
+            false => Some(std::env::current_dir().ok()?.join(argv0)),
+        };
+    }
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .map(|dir| dir.join(&argv0))
+        .find(|candidate| candidate.is_file())
+        .or_else(|| std::env::current_exe().ok())
+}
+
+/// The binary to become, if the one on disk is no longer the one running.
+///
+/// Both stamps must be readable. A path that has *become* unreadable is not an
+/// upgrade — exec'ing it would fail on every request from then on — and a path
+/// that was never readable cannot tell us anything changed.
+fn superseded(launched_from: &Option<Stamp>) -> Option<PathBuf> {
+    let was = launched_from.as_ref()?;
+    let now = stamp_of(was.path.clone())?;
+    match *was == now {
+        true => None,
+        false => Some(now.path),
+    }
+}
+
+/// Replace this process with the build at `path`, keeping the pid and the file
+/// descriptors so the client's pipes survive and it never learns the program on
+/// the other end changed. Returns only on failure: a successful `exec` does not
+/// come back, and a failed one leaves the old build serving, which is what it
+/// was already doing.
+fn become_new_build(path: &Path) {
+    use std::os::unix::process::CommandExt;
+    let _ = std::process::Command::new(path)
+        .args(std::env::args_os().skip(1))
+        .env(RESTARTED, "1")
+        .exec();
 }
 
 /// Route one parsed message. Returns `None` for notifications, which the spec
@@ -80,7 +187,10 @@ fn initialize_result(req: &Value) -> Value {
         .unwrap_or(PROTOCOL_VERSION);
     json!({
         "protocolVersion": version,
-        "capabilities": { "tools": {}, "resources": {} },
+        // `listChanged` is declared because it is true: this server can restart
+        // into a build with a different tool list, and the notification it then
+        // sends is only one a client may act on if the handshake said so.
+        "capabilities": { "tools": { "listChanged": true }, "resources": {} },
         "serverInfo": { "name": "navi", "version": env!("CARGO_PKG_VERSION") },
     })
 }
