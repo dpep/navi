@@ -976,3 +976,164 @@ fn miss_and_report_round_trip() {
     assert!(report["by_tool"]["locate"].as_u64().unwrap() >= 1);
     assert_eq!(report["misses"].as_array().unwrap().len(), 1);
 }
+
+/// A resident MCP server outlives the binary it was launched from: upgrade navi
+/// mid-session and the running process is still the old build, for as long as
+/// the session lasts. So it becomes the new one.
+///
+/// navi installs through the tap, where an upgrade moves the *symlink* — a new
+/// Cellar directory, the old file left exactly where it was. Watching the
+/// resolved path would see nothing move, which is why the launch path is what
+/// gets stamped. Driven here as a live session, since the batch `mcp` helper
+/// closes stdin before anything can be replaced underneath it.
+#[test]
+fn mcp_restarts_into_a_navi_installed_underneath_it() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::os::unix::fs::PermissionsExt;
+
+    let data = tempdir().unwrap();
+    let root = tempdir().unwrap();
+    let (old, new, bin) = (
+        root.path().join("v1"),
+        root.path().join("v2"),
+        root.path().join("bin"),
+    );
+    for dir in [&old, &new, &bin] {
+        std::fs::create_dir_all(dir).unwrap();
+    }
+
+    let was = old.join("navi");
+    std::fs::copy(env!("CARGO_BIN_EXE_navi"), &was).unwrap();
+    // A stand-in rather than navi again: what needs proving is that the process
+    // becomes whatever the link names, which a copy of the same code cannot
+    // show. It answers under the id it was asked under, because which request
+    // reaches it depends on how the relink raced the reader's stat.
+    let becomes = new.join("navi");
+    std::fs::write(
+        &becomes,
+        r#"#!/bin/sh
+while read -r line; do
+  id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
+  printf '{"jsonrpc":"2.0","id":%s,"result":{"restarted":"%s"}}\n' "$id" "$NAVI_MCP_RESTARTED"
+done
+"#,
+    )
+    .unwrap();
+    std::fs::set_permissions(&becomes, PermissionsExt::from_mode(0o755)).unwrap();
+
+    let launch = bin.join("navi");
+    std::os::unix::fs::symlink(&was, &launch).unwrap();
+
+    let mut child = std::process::Command::new(&launch)
+        .env("NAVI_DATA_DIR", data.path())
+        .env("NAVI_TRASH_DIR", data.path().join("trash"))
+        .env("RQ_DB", data.path().join("rq.db"))
+        .arg("mcp")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    let mut stdout = BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    let ask = |stdin: &mut std::process::ChildStdin, req: Value| {
+        writeln!(stdin, "{req}").unwrap();
+        stdin.flush().unwrap();
+    };
+
+    // Healthy first, so a later failure cannot be blamed on a session that
+    // never worked.
+    ask(
+        &mut stdin,
+        json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}),
+    );
+    stdout.read_line(&mut line).unwrap();
+    let init: Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(
+        init["result"]["capabilities"]["tools"]["listChanged"], true,
+        "initialize must promise the tool list can change, since it can: {init}"
+    );
+
+    // The relink, staged and renamed the way an installer moves a link, so the
+    // name never resolves to nothing.
+    let staged = bin.join("navi.new");
+    std::os::unix::fs::symlink(&becomes, &staged).unwrap();
+    std::fs::rename(&staged, &launch).unwrap();
+    assert!(
+        was.exists(),
+        "a relink must leave the old build in place, or this is testing a rebuild"
+    );
+
+    // This one is still owed to the build that read it — the swap is taken
+    // after an answer, not before — so it is answered and *then* the process
+    // becomes the replacement.
+    ask(
+        &mut stdin,
+        json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
+    );
+    line.clear();
+    stdout.read_line(&mut line).unwrap();
+    let owed: Value = serde_json::from_str(&line).unwrap();
+    assert_eq!(
+        owed["id"],
+        json!(2),
+        "the in-flight request must be answered"
+    );
+
+    // From here on it is the build the link now names.
+    ask(
+        &mut stdin,
+        json!({"jsonrpc": "2.0", "id": 3, "method": "tools/list"}),
+    );
+    let mut seen = Vec::new();
+    for _ in 0..3 {
+        line.clear();
+        if stdout.read_line(&mut line).unwrap_or(0) == 0 {
+            break;
+        }
+        let v: Value = serde_json::from_str(&line).unwrap();
+        let done = v["id"] == json!(3);
+        seen.push(v);
+        if done {
+            break;
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    // `restarted` carries the marker set across the exec, so this asserts both
+    // halves at once: the stand-in is serving, and it was told it replaced a
+    // build. What it does with that is the next test's job — a shell script
+    // cannot send the notification real navi sends.
+    assert!(
+        seen.iter().any(|v| v["result"]["restarted"] == "1"),
+        "the build the link now names should be answering: {seen:?}"
+    );
+}
+
+/// The other half: a build that replaced one opens by telling the client to
+/// re-read its tools. The client fetched that list from the build that has just
+/// been replaced and has no way to know to re-ask — from where it sits nothing
+/// happened — so answering calls correctly while describing them wrongly would
+/// be a half-heal.
+#[test]
+fn mcp_announces_a_new_tool_list_when_it_replaced_a_build() {
+    let data = tempdir().unwrap();
+    let out = Command::cargo_bin("navi")
+        .unwrap()
+        .env("NAVI_DATA_DIR", data.path())
+        .env("NAVI_TRASH_DIR", data.path().join("trash"))
+        .env("RQ_DB", data.path().join("rq.db"))
+        .env("NAVI_MCP_RESTARTED", "1")
+        .arg("mcp")
+        .write_stdin(String::new())
+        .output()
+        .unwrap()
+        .stdout;
+    let first = String::from_utf8(out).unwrap();
+    let first = first.lines().next().unwrap_or_default();
+    let announced: Value = serde_json::from_str(first).expect("a JSON line");
+    assert_eq!(
+        announced["method"], "notifications/tools/list_changed",
+        "a replacement must announce itself before anything else: {announced}"
+    );
+}
