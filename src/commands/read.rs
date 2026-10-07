@@ -148,7 +148,7 @@ fn read_outline(
 /// line order. `None` when rq spawns but returns nothing (file not indexed or an
 /// unsupported language), so the caller falls back to the scan.
 fn rq_outline(path: &str, limit: usize) -> Option<(Vec<Value>, usize)> {
-    let out = backend::run("rq", &["--symbols", path, "--ndjson", "--no-record"]).ok()?;
+    let out = backend::run("rq", &["--symbols", path, "--ndjson"]).ok()?;
     let text = String::from_utf8_lossy(&out.stdout);
     let mut entries = Vec::new();
     let mut total = 0usize;
@@ -242,7 +242,7 @@ fn find_symbol_def(
     b: &Backends,
 ) -> Option<(usize, &'static str)> {
     if b.rq {
-        let args = ["--ndjson", "--no-record", "--limit", "20", sym];
+        let args = ["--ndjson", "--limit", "20", sym];
         if let Ok(out) = backend::run("rq", &args) {
             let text = String::from_utf8_lossy(&out.stdout);
             for line in text.lines() {

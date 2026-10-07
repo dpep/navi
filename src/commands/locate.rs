@@ -144,12 +144,7 @@ fn parse_paths(stdout: &[u8], limit: usize) -> (Vec<Value>, usize) {
 
 fn locate_symbol(a: &LocateArgs, paths: &[String], b: &Backends) -> Result<Outcome> {
     if b.rq {
-        let mut args: Vec<String> = vec![
-            "--ndjson".into(),
-            "--no-record".into(),
-            "--limit".into(),
-            a.limit.to_string(),
-        ];
+        let mut args: Vec<String> = vec!["--ndjson".into(), "--limit".into(), a.limit.to_string()];
         if let Some(k) = &a.kind {
             args.push("--kind".into());
             args.push(k.clone());
