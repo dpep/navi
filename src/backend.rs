@@ -45,6 +45,20 @@ fn have_any(names: &[&'static str]) -> Option<&'static str> {
 pub fn run(bin: &str, args: &[&str]) -> Result<Output> {
     Command::new(bin)
         .args(args)
+        // names navi as the caller in `rq --usage`; other tools ignore it
+        .env("RQ_CALLER", "navi")
         .output()
         .map_err(|e| NaviError::new("backend_spawn_failed", format!("could not run {bin}: {e}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_tool_runs_with_navi_named_as_its_caller() {
+        let out = run("env", &[]).unwrap();
+        let env = String::from_utf8_lossy(&out.stdout);
+        assert!(env.lines().any(|l| l == "RQ_CALLER=navi"), "{env}");
+    }
 }
